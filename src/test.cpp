@@ -1,31 +1,36 @@
 #include <SDL2/SDL.h>
+
 #include <string>
 #include <cstdint>
+
 #include <optional>
 #include <unordered_map>
+
 #include <algorithm>
+#include "raisin/future.hpp"
 
 namespace sdl::serialization {
+
+static std::unordered_map<std::string, std::uint32_t> const _as_subsystem_flag{
+    { "timer", SDL_INIT_TIMER }, { "audio", SDL_INIT_AUDIO },
+    { "video", SDL_INIT_VIDEO }, { "joystick", SDL_INIT_JOYSTICK },
+    { "haptic", SDL_INIT_HAPTIC },
+    { "game-controller", SDL_INIT_GAMECONTROLLER },
+    { "events", SDL_INIT_EVENTS }, { "everything", SDL_INIT_EVERYTHING }
+};
 
 std::optional<std::uint32_t>
 as_subsystem_flag(std::string const & name)
 {
-    static std::unordered_map<std::string, std::uint32_t> const as_flag{
-        { "timer", SDL_INIT_TIMER }, { "audio", SDL_INIT_AUDIO },
-        { "video", SDL_INIT_VIDEO }, { "joystick", SDL_INIT_JOYSTICK },
-        { "haptic", SDL_INIT_HAPTIC },
-        { "game-controller", SDL_INIT_GAMECONTROLLER },
-        { "events", SDL_INIT_EVENTS }, { "everything", SDL_INIT_EVERYTHING }
-    };
+    using namespace sdl;
+    auto to_lower = [](unsigned char ch) { return std::tolower(ch); };
+    auto const lower_name = name | views::transform(to_lower)
+                                 | ranges::to<std::string>();
 
-    std::string lower_name{name};
-    std::transform(name.begin(), name.end(), lower_name.begin(),
-                   [](unsigned char ch) { return std::tolower(ch); });
-
-    if (not as_flag.contains(name)) {
+    if (not _as_subsystem_flag.contains(lower_name)) {
         return std::nullopt;
     }
-    return as_flag.at(name);
+    return _as_subsystem_flag.at(lower_name);
 }
 }
 
