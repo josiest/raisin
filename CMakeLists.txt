@@ -11,3 +11,4 @@ set_target_properties(test PROPERTIES
                       CXX_STANDARD 20 CXX_STANDARD_REQUIRED TRUE)
 
 target_include_directories(test PUBLIC include)
+target_compile_options(test PRIVATE -fconcepts-diagnostics-depth=2)
