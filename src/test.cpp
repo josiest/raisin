@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <variant>
 
 #include <iostream>
 #include <iterator>
@@ -12,33 +13,39 @@ int main()
 {
     using namespace raisin::serialization;
 
-    std::vector<std::string> const subsystems{
-        "video", "events", "animation", "geometry"
-    };
+    std::vector<std::string> subsystems;
+    auto result = load_subsystem_names(
+            "../examples/assets/config.toml",
+            std::back_inserter(subsystems));
 
-    // write bad subsystem names to a list
-    // in case they were specified incorrectly
-    std::vector<std::string> not_subsystems;
-    not_subsystems.reserve(subsystems.size());
-
-    auto flags = parse_subsystem_flags(
-            subsystems,
-            std::back_inserter(not_subsystems));
-
-    // log when a name that was specified isn't a subsystem
-    auto log_bad_subsystem = [](std::string const & name) {
-        std::cout << "No subsystem named " << name << "\n";
-    };
-    if (not flags) {
-        std::cout << "raisin error: Unable to parse flags:\n";
-        ranges::for_each(not_subsystems, log_bad_subsystem);
+    if (std::holds_alternative<std::string>(result)) {
+        SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
+                        "Couldn't parse system config: %s",
+                        std::get<std::string>(result).c_str());
         return EXIT_FAILURE;
     }
 
-    // some other error on SDL side occured
-    if (not SDL_Init(*flags)) {
-        std::cout << "SDL Error: Unable to initialize SDL: "
-                  << SDL_GetError() << "\n";
+    // transform ubsystem names into an int flag
+    // keep track of any names that were invalid
+    std::vector<std::string> invalid_names;
+    invalid_names.reserve(subsystems.size());
+
+    std::uint32_t const flags = parse_subsystem_flags(
+            subsystems,
+            std::back_inserter(invalid_names));
+
+    // log any names that were invalid
+    auto log_invalid_name = [](std::string const & name) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_ASSERT,
+                    "No subsystem named %s, skipping",
+                    name.c_str());
+    };
+    ranges::for_each(invalid_names, log_invalid_name);
+
+    // some other error on SDL side occured when initializing
+    if (SDL_Init(flags) != 0) {
+        SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
+                        "Unable to initialize SDL: %s", SDL_GetError());
         return EXIT_FAILURE;
     }
     SDL_Log("Initialized SDL succesfully");
