@@ -1,19 +1,28 @@
+#pragma once
+#include "raisin/future.hpp"
+#include "raisin/parsing.hpp"
+
+// low-level frameworks
 #include <SDL2/SDL.h>
+
+// data types
 #include <string>
 #include <cstdint>
 
+// data structures/resource handles
 #include <optional>
 #include <tl/expected.hpp>
 #include <unordered_map>
 
+// algorithms
 #include <algorithm>
 #include <iterator>
-#include "raisin/future.hpp"
 
+// serialization
 #define TOML_EXCEPTIONS 0
 #include <toml++/toml.h>
 
-namespace raisin::serialization {
+namespace raisin {
 
 using namespace std::string_literals;
 
@@ -25,109 +34,6 @@ const _as_subsystem_flag{
     { "game-controller", SDL_INIT_GAMECONTROLLER },
     { "events", SDL_INIT_EVENTS }, { "everything", SDL_INIT_EVERYTHING }
 };
-
-std::string
-inline _strlower(std::string const & str)
-{
-    auto tolower = [](unsigned char ch) { return std::tolower(ch); };
-    return str | views::transform(tolower) | ranges::to<std::string>();
-}
-
-inline std::optional<std::uint32_t>
-as_subsystem_flag(std::string const & name)
-{
-    auto const lower_name = _strlower(name);
-    if (not _as_subsystem_flag.contains(lower_name)) {
-        return std::nullopt;
-    }
-    return _as_subsystem_flag.at(lower_name);
-}
-
-/**
- * Parse a range of subsystem names into an SDL subsystem flag.
- *
- * Parameters:
- *   \param subsystems - the subsystem names to parse
- *   \param invalid_names - where to write invalid names
- *
- * \return the union of the subsystem flags as integers. Any names that aren't
- *         valid subsystems will not be included in the union, but will be
- *         written to invalid_names.
- */
-template<ranges::input_range name_reader,
-         std::weakly_incrementable name_writer>
-
-std::uint32_t
-parse_subsystem_flags(name_reader const & subsystems,
-                      name_writer invalid_names)
-{
-    // make sure all names are lower-case
-    auto lower_names = subsystems | views::transform(_strlower)
-                                  | ranges::to<std::vector>;
-
-    // write down any subsystem names that are invalid
-    auto is_not_subsystem = [](std::string const & name) {
-        return not _as_subsystem_flag.contains(name);
-    };
-    ranges::copy_if(lower_names, invalid_names, is_not_subsystem);
-
-    // transform valid names into flags and join
-    auto is_subsystem = [](std::string const & name) {
-        return _as_subsystem_flag.contains(name);
-    };
-    auto as_flag = [](std::string const & name) {
-        return _as_subsystem_flag.at(name);
-    };
-    auto join = [](std::uint32_t sum, std::uint32_t x) { return sum | x; };
-    return ranges::accumulate(lower_names | views::filter(is_subsystem)
-                                          | views::transform(as_flag),
-                               0u, join);
-}
-
-/**
- * Load SDL Subsystem names from a config file into a writable iterator.
- *
- * Parameters:
- *   \param config_path - the name of the path to load
- *   \param subsystems - the subsystem names to write to
- *
- * \return the number of names written on succesfully parsing the config file.
- *         Otherwise, return a parse
- */
-template<std::weakly_incrementable name_writer>
-tl::expected<std::size_t, std::string>
-
-load_subsystem_names(std::string const & config_path,
-                     name_writer subsystems)
-{
-    // read the config file, return any parsing errors
-    toml::parse_result result = toml::parse_file(config_path);
-    if (not result) {
-        return tl::unexpected(std::string(result.error().description()));
-    }
-    auto table = std::move(result).table();
-
-    // if subsystem-flags aren't specified then there are no susbystems written
-    auto flag_node = table["system"]["subsystems"];
-    if (not flag_node) {
-        return 0u;
-    }
-    // system.subsystems must be an array of strings
-    if (not flag_node.is_array()) {
-        return tl::unexpected("system.subsystems must be an array"s);
-    }
-    auto flags = *flag_node.as_array();
-    if (not flags.is_homogeneous(toml::node_type::string)) {
-        return tl::unexpected("all subsytem names in system.subsystems "s +
-                              "must be strings"s);
-    }
-    // copy the flags as strings into the subsystem names
-    flags.for_each([&subsystems](toml::value<std::string> const & name) {
-        *subsystems = name.get();
-        ++subsystems;
-    });
-    return flags.size();
-}
 
 /**
  * Initialize SDL with the subsystems defined in a toml config file.
@@ -148,13 +54,12 @@ load_subsystems_from_config(std::string const & config_path,
                             name_writer invalid_names)
 {
     std::vector<std::string> subsystems;
-    auto subsystems_result = load_subsystem_names(
-            config_path,
-            std::back_inserter(subsystems));
+    auto subsystems_result = load_flag_names(config_path, "system.subsystems",
+                                             std::back_inserter(subsystems));
 
     if (not subsystems_result) {
         return tl::unexpected(subsystems_result.error());
     }
-    return parse_subsystem_flags(subsystems, invalid_names);
+    return parse_flags(_as_subsystem_flag, subsystems, invalid_names);
 }
 }

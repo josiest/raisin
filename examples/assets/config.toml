@@ -1,2 +1,8 @@
 [system]
 subsystems = ["video", "events", "geometry"]
+
+[window]
+title = "test"
+width = 1920
+height = 800
+flags = ["input-grabbed", "fulscreen-laptop"]
