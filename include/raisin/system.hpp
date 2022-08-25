@@ -3,7 +3,7 @@
 #include <cstdint>
 
 #include <optional>
-#include <variant>
+#include <tl/expected.hpp>
 #include <unordered_map>
 
 #include <algorithm>
@@ -95,7 +95,7 @@ parse_subsystem_flags(name_reader const & subsystems,
  *         Otherwise, return a parse
  */
 template<std::weakly_incrementable name_writer>
-std::variant<std::size_t, std::string>
+tl::expected<std::size_t, std::string>
 
 load_subsystem_names(std::string const & config_path,
                      name_writer subsystems)
@@ -103,7 +103,7 @@ load_subsystem_names(std::string const & config_path,
     // read the config file, return any parsing errors
     toml::parse_result result = toml::parse_file(config_path);
     if (not result) {
-        return std::string(result.error().description());
+        return tl::unexpected(std::string(result.error().description()));
     }
     auto table = std::move(result).table();
 
@@ -114,11 +114,12 @@ load_subsystem_names(std::string const & config_path,
     }
     // system.subsystems must be an array of strings
     if (not flag_node.is_array()) {
-        return "system.subsystems must be an array"s;
+        return tl::unexpected("system.subsystems must be an array"s);
     }
     auto flags = *flag_node.as_array();
     if (not flags.is_homogeneous(toml::node_type::string)) {
-        return "all subsytem names in system.subsystems must be strings"s;
+        return tl::unexpected("all subsytem names in system.subsystems "s +
+                              "must be strings"s);
     }
     // copy the flags as strings into the subsystem names
     flags.for_each([&subsystems](toml::value<std::string> const & name) {
@@ -126,5 +127,34 @@ load_subsystem_names(std::string const & config_path,
         ++subsystems;
     });
     return flags.size();
+}
+
+/**
+ * Initialize SDL with the subsystems defined in a toml config file.
+ *
+ * Parameters:
+ *   \param config_path - the path to the toml config file
+ *   \param invalid_names - a place to write any invalid names to
+ *
+ * \return the union of the subsystem flags as integers if parsing was
+ *         successful.
+ *
+ * \note Any names that aren't valid subsystems will not be included in the
+ *       union, but will be written to invalid_names.
+ */
+template<std::weakly_incrementable name_writer>
+tl::expected<std::uint32_t, std::string>
+load_subsystems_from_config(std::string const & config_path,
+                            name_writer invalid_names)
+{
+    std::vector<std::string> subsystems;
+    auto subsystems_result = load_subsystem_names(
+            config_path,
+            std::back_inserter(subsystems));
+
+    if (not subsystems_result) {
+        return tl::unexpected(subsystems_result.error());
+    }
+    return parse_subsystem_flags(subsystems, invalid_names);
 }
 }

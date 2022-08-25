@@ -13,39 +13,29 @@ int main()
 {
     using namespace raisin::serialization;
 
-    std::vector<std::string> subsystems;
-    auto result = load_subsystem_names(
-            "../examples/assets/config.toml",
-            std::back_inserter(subsystems));
-
-    if (std::holds_alternative<std::string>(result)) {
-        SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
-                        "Couldn't parse system config: %s",
-                        std::get<std::string>(result).c_str());
-        return EXIT_FAILURE;
-    }
-
-    // transform ubsystem names into an int flag
-    // keep track of any names that were invalid
+    // load the subsystem flags from file
     std::vector<std::string> invalid_names;
-    invalid_names.reserve(subsystems.size());
-
-    std::uint32_t const flags = parse_subsystem_flags(
-            subsystems,
+    auto subsystems_result = load_subsystems_from_config(
+            "../examples/assets/config.toml",
             std::back_inserter(invalid_names));
 
-    // log any names that were invalid
-    auto log_invalid_name = [](std::string const & name) {
+    // log any subsystem names that are invalid
+    if (not subsystems_result) {
+        SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
+                        "Couldn't parse system config: %s",
+                        subsystems_result.error().c_str());
+        return EXIT_FAILURE;
+    }
+    for (auto const & name : invalid_names) {
         SDL_LogWarn(SDL_LOG_CATEGORY_ASSERT,
                     "No subsystem named %s, skipping",
                     name.c_str());
-    };
-    ranges::for_each(invalid_names, log_invalid_name);
-
+    }
     // some other error on SDL side occured when initializing
-    if (SDL_Init(flags) != 0) {
+    if (SDL_Init(*subsystems_result) != 0) {
         SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
-                        "Unable to initialize SDL: %s", SDL_GetError());
+                        "Unable to initialize SDL: %s",
+                        SDL_GetError());
         return EXIT_FAILURE;
     }
     SDL_Log("Initialized SDL succesfully");
