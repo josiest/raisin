@@ -36,11 +36,10 @@ const _as_subsystem_flag{
 };
 
 /**
- * Initialize SDL with the subsystems defined in a toml config file.
+ * \brief Load SDL subsystem flags from a config file.
  *
- * Parameters:
- *   \param config_path - the path to the toml config file
- *   \param invalid_names - a place to write any invalid names to
+ * \param config_path - the path to the toml config file
+ * \param invalid_names - a place to write any invalid names to
  *
  * \return the union of the subsystem flags as integers if parsing was
  *         successful.
@@ -60,6 +59,33 @@ load_subsystems_from_config(std::string const & config_path,
     if (not subsystems_result) {
         return tl::unexpected(subsystems_result.error());
     }
-    return parse_flags(_as_subsystem_flag, subsystems, invalid_names);
+    return parse_flags(subsystems,
+                       [](auto const & name) { return _as_subsystem_flag.contains(name); },
+                       [](auto const & name) { return _as_subsystem_flag.at(name); },
+                       invalid_names);
+}
+
+/**
+ * \brief Initialize SDL with the subsystems defined in a toml config file.
+ *
+ * \param config_path - the path to the toml config file
+ * \param invalid_names - a place to write any invalid names to
+ *
+ * \note Any names that aren't valid subsystems will be skipped over and written
+ *       to invalid_names.
+ */
+template<std::weakly_incrementable name_writer>
+tl::expected<bool, std::string>
+init_sdl_from_config(std::string const & config_path,
+                     name_writer invalid_names)
+{
+    auto flags = load_subsystems_from_config(config_path, invalid_names);
+    if (not flags) {
+        return tl::unexpected(flags.error().c_str());
+    }
+    if (SDL_Init(*flags) != 0) {
+        return tl::unexpected(SDL_GetError());
+    }
+    return true;
 }
 }

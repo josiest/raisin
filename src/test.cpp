@@ -17,27 +17,20 @@ int main()
 
     // load the subsystem flags from file
     std::vector<std::string> invalid_subsystems;
-    auto subsystems_result = load_subsystems_from_config(
+    auto init_result = init_sdl_from_config(
             config_path,
             std::back_inserter(invalid_subsystems));
 
-    // log any subsystem names that are invalid
-    if (not subsystems_result) {
-        SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
-                        "Couldn't parse system config: %s",
-                        subsystems_result.error().c_str());
-        return EXIT_FAILURE;
-    }
     for (auto const & name : invalid_subsystems) {
         SDL_LogWarn(SDL_LOG_CATEGORY_ASSERT,
                     "No subsystem named \"%s\", skipping",
                     name.c_str());
     }
     // some other error on SDL side occured when initializing
-    if (SDL_Init(*subsystems_result) != 0) {
+    if (not init_result) {
         SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
                         "Unable to initialize SDL: %s",
-                        SDL_GetError());
+                        init_result.error().c_str());
         return EXIT_FAILURE;
     }
 

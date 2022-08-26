@@ -64,7 +64,10 @@ load_window_flags_from_config(std::string const & config_path,
     if (not flag_result) {
         return tl::unexpected(flag_result.error());
     }
-    return parse_flags(_as_window_flag, flags, invalid_names);
+    return parse_flags(flags,
+                       [](auto const & name) { return _as_window_flag.contains(name); },
+                       [](auto const & name) { return _as_window_flag.at(name); },
+                       invalid_names);
 }
 
 /**

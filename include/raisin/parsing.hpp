@@ -11,6 +11,8 @@
 // algorithms
 #include <algorithm>
 #include <iterator>
+#include <concepts>
+#include <functional>
 
 // data structures/resource handles
 #include <unordered_map>
@@ -44,11 +46,14 @@ inline _strlower(std::string const & str)
  *         included in the union, but will be written to invalid_names.
  */
 template<ranges::input_range name_reader,
+         std::predicate<std::string> name_validator,
+         std::regular_invocable<std::string> name_transformer,
          std::weakly_incrementable name_writer>
 
 std::uint32_t
-parse_flags(flag_lookup const & lookup,
-            name_reader const & flag_names,
+parse_flags(name_reader const & flag_names,
+            name_validator name_is_valid,
+            name_transformer as_flag,
             name_writer invalid_names)
 {
     // make sure all names are lower-case
@@ -56,18 +61,10 @@ parse_flags(flag_lookup const & lookup,
                                   | ranges::to<std::vector>;
 
     // write down any invalid names
-    auto name_is_invalid = [&lookup](std::string const & name) {
-        return not lookup.contains(name);
-    };
+    auto name_is_invalid = std::not_fn(name_is_valid);
     ranges::copy_if(lower_names, invalid_names, name_is_invalid);
 
     // transform valid names into flags and join
-    auto name_is_valid = [&lookup](std::string const & name) {
-        return lookup.contains(name);
-    };
-    auto as_flag = [&lookup](std::string const & name) {
-        return lookup.at(name);
-    };
     auto join = [](std::uint32_t sum, std::uint32_t x) { return sum | x; };
     return ranges::accumulate(lower_names | views::filter(name_is_valid)
                                           | views::transform(as_flag),
