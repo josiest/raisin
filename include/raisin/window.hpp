@@ -24,39 +24,53 @@
 
 namespace raisin {
 
-inline static std::unordered_map<std::string, std::uint32_t>
-const _as_window_flag{
-    { "fullscreen", SDL_WINDOW_FULLSCREEN },
-    { "fullscreen-desktop", SDL_WINDOW_FULLSCREEN_DESKTOP },
-    { "opengl", SDL_WINDOW_OPENGL }, { "vulkan", SDL_WINDOW_VULKAN },
-    { "metal", SDL_WINDOW_METAL }, { "hidden", SDL_WINDOW_HIDDEN },
-    { "borderless", SDL_WINDOW_BORDERLESS },
-    { "resizable", SDL_WINDOW_RESIZABLE },
-    { "minimized", SDL_WINDOW_MINIMIZED },
-    { "maximized", SDL_WINDOW_MAXIMIZED },
-    { "input-grabbed", SDL_WINDOW_INPUT_GRABBED },
-    { "allow-high-dpi", SDL_WINDOW_ALLOW_HIGHDPI },
-    { "shown", SDL_WINDOW_SHOWN }
-};
-
 /**
  * Initialize SDL with the subsystems defined in a toml config file.
  *
- * Parameters:
- *   \param config_path - the path to the toml config file
- *   \param invalid_names - a place to write any invalid names to
+ * \param config_path - the path to the toml config file
+ * \param invalid_names - a place to write any invalid names to
  *
  * \return the union of the subsystem flags as integers if parsing was
  *         successful.
  *
  * \note Any names that aren't valid subsystems will not be included in the
  *       union, but will be written to invalid_names.
+ *
+ * Acceptable flag names:
+ * - fullscreen
+ * - fullscreen-desktop
+ * - opengl
+ * - vulkan
+ * - metal
+ * - hidden
+ * - borderless
+ * - resizable
+ * - minimized
+ * - maximized
+ * - input-grabbed
+ * - allow-high-dpi
+ * - shown
  */
 template<std::weakly_incrementable name_writer>
 tl::expected<std::uint32_t, std::string>
-load_window_flags_from_config(std::string const & config_path,
-                              name_writer invalid_names)
+load_window_flags(std::string const & config_path,
+                  name_writer invalid_names)
 {
+    static std::unordered_map<std::string, std::uint32_t>
+    const _as_window_flag{
+        { "fullscreen", SDL_WINDOW_FULLSCREEN },
+        { "fullscreen-desktop", SDL_WINDOW_FULLSCREEN_DESKTOP },
+        { "opengl", SDL_WINDOW_OPENGL }, { "vulkan", SDL_WINDOW_VULKAN },
+        { "metal", SDL_WINDOW_METAL }, { "hidden", SDL_WINDOW_HIDDEN },
+        { "borderless", SDL_WINDOW_BORDERLESS },
+        { "resizable", SDL_WINDOW_RESIZABLE },
+        { "minimized", SDL_WINDOW_MINIMIZED },
+        { "maximized", SDL_WINDOW_MAXIMIZED },
+        { "input-grabbed", SDL_WINDOW_INPUT_GRABBED },
+        { "allow-high-dpi", SDL_WINDOW_ALLOW_HIGHDPI },
+        { "shown", SDL_WINDOW_SHOWN }
+    };
+
     std::vector<std::string> flags;
     auto flag_result = load_flag_names(config_path, "window.flags",
                                        std::back_inserter(flags));
@@ -82,7 +96,7 @@ make_window_from_config(std::string const & config_path,
                         name_writer invalid_flag_names)
 {
     // parse window flags
-    auto flags = load_window_flags_from_config(config_path, invalid_flag_names);
+    auto flags = load_window_flags(config_path, invalid_flag_names);
     if (not flags) {
         return tl::unexpected(flags.error());
     }

@@ -26,15 +26,6 @@ namespace raisin {
 
 using namespace std::string_literals;
 
-inline static std::unordered_map<std::string, std::uint32_t>
-const _as_subsystem_flag{
-    { "timer", SDL_INIT_TIMER }, { "audio", SDL_INIT_AUDIO },
-    { "video", SDL_INIT_VIDEO }, { "joystick", SDL_INIT_JOYSTICK },
-    { "haptic", SDL_INIT_HAPTIC },
-    { "game-controller", SDL_INIT_GAMECONTROLLER },
-    { "events", SDL_INIT_EVENTS }, { "everything", SDL_INIT_EVERYTHING }
-};
-
 /**
  * \brief Load SDL subsystem flags from a config file.
  *
@@ -49,9 +40,19 @@ const _as_subsystem_flag{
  */
 template<std::weakly_incrementable name_writer>
 tl::expected<std::uint32_t, std::string>
-load_subsystems_from_config(std::string const & config_path,
-                            name_writer invalid_names)
+load_subsystem_flags(std::string const & config_path,
+                     name_writer invalid_names)
 {
+
+    static std::unordered_map<std::string, std::uint32_t>
+    const _as_subsystem_flag{
+        { "timer", SDL_INIT_TIMER }, { "audio", SDL_INIT_AUDIO },
+        { "video", SDL_INIT_VIDEO }, { "joystick", SDL_INIT_JOYSTICK },
+        { "haptic", SDL_INIT_HAPTIC },
+        { "game-controller", SDL_INIT_GAMECONTROLLER },
+        { "events", SDL_INIT_EVENTS }, { "everything", SDL_INIT_EVERYTHING }
+    };
+
     std::vector<std::string> subsystems;
     auto subsystems_result = load_flag_names(config_path, "system.subsystems",
                                              std::back_inserter(subsystems));
@@ -79,7 +80,7 @@ tl::expected<bool, std::string>
 init_sdl_from_config(std::string const & config_path,
                      name_writer invalid_names)
 {
-    auto flags = load_subsystems_from_config(config_path, invalid_names);
+    auto flags = load_subsystem_flags(config_path, invalid_names);
     if (not flags) {
         return tl::unexpected(flags.error().c_str());
     }

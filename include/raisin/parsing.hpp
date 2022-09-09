@@ -26,7 +26,6 @@
 namespace raisin {
 
 using namespace std::string_literals;
-using flag_lookup = std::unordered_map<std::string, std::uint32_t>;
 
 std::string
 inline _strlower(std::string const & str)
