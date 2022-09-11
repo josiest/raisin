@@ -3,6 +3,9 @@ subsystems = ["video", "events", "geometry"]
 
 [window]
 title = "test"
-width = 1920
-height = 800
+width = 800
+height = 640
 flags = ["input-grabbed", "fulscreen-laptop"]
+
+[renderer]
+flags = ["accelerated", "reduced-speed"]

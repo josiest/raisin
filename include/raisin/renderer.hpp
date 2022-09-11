@@ -76,12 +76,6 @@ make_renderer_from_config(std::string const & config_path,
                           SDL_Window * window,
                           name_writer invalid_flag_names)
 {
-    // parse window flags
-    auto flags = load_window_flags(config_path, invalid_flag_names);
-    if (not flags) {
-        return tl::unexpected(flags.error());
-    }
-
     // read config file
     toml::parse_result table_result = toml::parse_file(config_path);
     if (not table_result) {
@@ -91,8 +85,8 @@ make_renderer_from_config(std::string const & config_path,
 
     // fail if no renderer parameters were specified
     if (not table["renderer"]) {
-        return tl::unexpected("config at "s + config_apth +
-                              "has no renderer settings"s);
+        return tl::unexpected("config at "s + config_path +
+                              " has no renderer settings"s);
     }
     if (not table["renderer"].is_table()) {
         return tl::unexpected("renderer config settings must be a table!"s);
@@ -102,7 +96,7 @@ make_renderer_from_config(std::string const & config_path,
     // parse renderer driver
     int driver_index = -1;
     if (renderer["driver_index"].is_integer()) {
-        driver_index = renderer["driver_index"].as_integer->get();
+        driver_index = renderer["driver_index"].as_integer()->get();
     }
     else if (renderer["driver_index"]) {
         return tl::unexpected("renderer.driver_index must be an integer"s);
