@@ -14,7 +14,7 @@
 int main()
 {
     using namespace raisin;
-    std::string const config_path = "../examples/assets/config.toml";
+    std::string const config_path = "../assets/config.toml";
 
     // load the subsystem flags from file
     std::vector<std::string> invalid_flags;

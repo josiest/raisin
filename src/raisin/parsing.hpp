@@ -22,10 +22,12 @@
 // serialization
 #define TOML_EXCEPTIONS 0
 #include <toml++/toml.h>
+#include <filesystem>
 
 namespace raisin {
 
 using namespace std::string_literals;
+namespace fs = std::filesystem;
 
 std::string
 inline _strlower(std::string const & str)
@@ -84,12 +86,16 @@ parse_flags(name_reader const & flag_names,
 template<std::weakly_incrementable name_writer>
 tl::expected<std::size_t, std::string>
 
-load_flag_names(std::string const & config_path,
+load_flag_names(fs::path const & config_path,
                 std::string const & variable_path,
                 name_writer flag_names)
 {
+    if (not fs::exists(config_path)) {
+        return tl::unexpected("no file named "s + config_path.string());
+    }
+
     // read the config file, return any parsing errors
-    toml::parse_result result = toml::parse_file(config_path);
+    toml::parse_result result = toml::parse_file(config_path.string());
     if (not result) {
         return tl::unexpected(std::string(result.error().description()));
     }

@@ -61,9 +61,9 @@ load_subsystem_flags(std::string const & config_path,
         return tl::unexpected(subsystems_result.error());
     }
     return parse_flags(subsystems,
-                       [](auto const & name) { return _as_subsystem_flag.contains(name); },
-                       [](auto const & name) { return _as_subsystem_flag.at(name); },
-                       invalid_names);
+        [](auto const & name) { return _as_subsystem_flag.contains(name); },
+        [](auto const & name) { return _as_subsystem_flag.at(name); },
+        invalid_names);
 }
 
 /**
