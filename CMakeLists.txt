@@ -42,6 +42,7 @@ set_target_properties(raisin::raisin PROPERTIES
 
 include(CMakePackageConfigHelpers)
 
+# create the config settings
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/raisin-config.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/raisin-config.cmake
@@ -51,10 +52,13 @@ write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/raisin-config-version.cmake
     COMPATIBILITY AnyNewerVersion)
 
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/raisin-config.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/raisin-config-version.cmake"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/raisin)
+# install the config settings
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/raisin-config.cmake"
+              "${CMAKE_CURRENT_BINARY_DIR}/raisin-config-version.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/raisin)
 
-export(PACKAGE raisin)
-
+# export and install the cmake targets for the library
+install(EXPORT raisin-targets
+        FILE raisin-targets.cmake
+        NAMESPACE raisin::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/raisin)
