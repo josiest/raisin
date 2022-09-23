@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.18)
 project(raisin VERSION 0.1.0)
 add_library(raisin INTERFACE)
 
+find_package(SDL2 REQUIRED)
 find_package(range-v3 REQUIRED)
 find_package(tomlplusplus REQUIRED)
 find_package(tl-expected REQUIRED)
  
 target_link_libraries(raisin INTERFACE
+    SDL2::SDL2
     range-v3::range-v3
     tomlplusplus::tomlplusplus
     tl::expected)
