@@ -9,7 +9,7 @@ find_package(tl-expected REQUIRED)
 target_link_libraries(raisin INTERFACE
     range-v3::range-v3
     tomlplusplus::tomlplusplus
-    tl-expected::tl-expected)
+    tl::expected)
 
 #
 # Export and install the library
