@@ -1,26 +1,26 @@
 #pragma once
-#include "raisin/future.hpp"
 
-// low-level frameworks
-#include <SDL2/SDL.h>
+// frameworks
+#include "raisin/future.hpp"
 
 // data types
 #include <string>
 #include <cstdint>
 
 // algorithms
-#include <algorithm>
-#include <numeric>
-#include <functional>
+#include <algorithm>    // copy_if, transform
+#include <numeric>      // accumulate
 
-// ranges and concepts
-#include <iterator>
+// type constraints
+#include <type_traits>
 #include <concepts>
-#include <ranges>
 
-// data structures/resource handles
+#include <ranges>       // input_range
+#include <functional>   // predicate, regular_invocable
+#include <iterator>     // weakly_incrementable, back_inserter
+
+// data structures
 #include <unordered_map>
-#include <optional>
 
 // serialization
 #define TOML_EXCEPTIONS 0
@@ -36,17 +36,18 @@ std::string
 inline _strlower(std::string const & str)
 {
     auto tolower = [](unsigned char ch) { return std::tolower(ch); };
-    std::string lower;
+    std::string lower{};
     std::ranges::transform(str, std::back_inserter(lower), tolower);
     return lower;
 }
 
 /**
- * Parse a range of flag names names into their respective SDL flags
+ * Parse a range of flag names names into a single integer flag
  *
- * \param lookup - maps flag names to their respective SDL flags
- * \param flag_names - the names to parse
- * \param invalid_names - where to write invalid names
+ * \param flag_names        the names to parse
+ * \param name_is_valid     determines if a name is a valid flag name
+ * \param as_flag           transforms a flag name into an integer
+ * \param invalid_names     a place to write invalid names to
  *
  * \return the union of the flags as integers. Any undefined flag names won't be
  *         included in the union, but will be written to invalid_names.
@@ -72,62 +73,42 @@ parse_flags(name_reader const & flag_names,
     std::ranges::copy_if(lower_names, invalid_names, name_is_invalid);
 
     // transform valid names into flags and join
-    auto join = [](std::uint32_t sum, std::uint32_t x) { return sum | x; };
+    auto join = [](std::uint32_t flag_union, std::uint32_t flag) {
+        return flag_union | flag;
+    };
     auto to_valid_flags = lower_names | std::views::filter(name_is_valid)
                                       | std::views::transform(as_flag);
     return std::accumulate(to_valid_flags.begin(),
                            to_valid_flags.end(), 0u, join);
 }
 
-/**
- * Load SDL flag names from a config file into a writable iterator.
- *
- * Parameters:
- *   \param config_path - the name of the path to load
- *   \param variable_path - the toml variable path to load from
- *   \param flag_names - the flag names to write to
- *
- * \return the number of names written on succesfully parsing the config file.
- *         Otherwise, return a parse
- */
 template<std::weakly_incrementable name_writer>
-expected<std::size_t, std::string>
-
-load_flag_names(fs::path const & config_path,
+auto
+_flags_from_map(std::unordered_map<std::string, std::uint32_t> const & flagmap,
                 std::string const & variable_path,
-                name_writer flag_names)
+                std::uint32_t & flag_output,
+                name_writer invalid_names)
 {
-    if (not fs::exists(config_path)) {
-        return unexpected("no file named "s + config_path.string());
-    }
+    return [&flagmap, &flag_output, &variable_path, invalid_names]
+           (toml::table const & table)
+        -> expected<toml::table, std::string>
+    {
+        std::vector<std::string> flags;
+        auto load_flags = load_array<std::string>(
+                variable_path,
+                std::back_inserter(flags));
 
-    // read the config file, return any parsing errors
-    toml::parse_result result = toml::parse_file(config_path.string());
-    if (not result) {
-        return unexpected(std::string(result.error().description()));
-    }
-    auto table = std::move(result).table();
+        auto result = load_flags(table);
+        if (not result) { return result; }
 
-    // if subsystem-flags aren't specified then there are no susbystems written
-    auto flag_node = table.at_path(variable_path);
-    if (not flag_node) {
-        return 0u;
-    }
-    // flag_names must be an array of strings
-    if (not flag_node.is_array()) {
-        return unexpected(variable_path + " must be an array"s);
-    }
-    auto flags = *flag_node.as_array();
-    if (not flags.is_homogeneous(toml::node_type::string)) {
-        return unexpected("all subsytem names in " + variable_path + " "s +
-                          "must be strings"s);
-    }
-    // copy the flags as strings into the subsystem names
-    flags.for_each([&flag_names](toml::value<std::string> const & name) {
-        *flag_names = name.get();
-        ++flag_names;
-    });
-    return flags.size();
+        auto flag_exists = [&flagmap](auto const & name) {
+            return flagmap.contains(name);
+        };
+        auto as_flag = [&flagmap](auto const & name) {
+            return flagmap.at(name);
+        };
+        flag_output = parse_flags(flags, flag_exists, as_flag, invalid_names);
+        return result;
+    };
 }
-
 }

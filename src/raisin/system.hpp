@@ -38,9 +38,9 @@ using namespace std::string_literals;
  *       union, but will be written to invalid_names.
  */
 template<std::weakly_incrementable name_writer>
-expected<std::uint32_t, std::string>
-load_subsystem_flags(std::string const & config_path,
-                     name_writer invalid_names)
+auto load_subsystem_flags(std::string const & variable_path,
+                          std::uint32_t flag_output,
+                          name_writer invalid_names)
 {
 
     static std::unordered_map<std::string, std::uint32_t>
@@ -52,17 +52,8 @@ load_subsystem_flags(std::string const & config_path,
         { "events", SDL_INIT_EVENTS }, { "everything", SDL_INIT_EVERYTHING }
     };
 
-    std::vector<std::string> subsystems;
-    auto subsystems_result = load_flag_names(config_path, "system.subsystems",
-                                             std::back_inserter(subsystems));
-
-    if (not subsystems_result) {
-        return unexpected(subsystems_result.error());
-    }
-    return parse_flags(subsystems,
-        [](auto const & name) { return _as_subsystem_flag.contains(name); },
-        [](auto const & name) { return _as_subsystem_flag.at(name); },
-        invalid_names);
+    return _flags_from_map(_as_subsystem_flag, variable_path,
+                           flag_output, invalid_names);
 }
 
 /**
@@ -75,17 +66,22 @@ load_subsystem_flags(std::string const & config_path,
  *       to invalid_names.
  */
 template<std::weakly_incrementable name_writer>
-expected<bool, std::string>
-init_sdl_from_config(std::string const & config_path,
-                     name_writer invalid_names)
+auto init_sdl(std::string const & variable_path,
+              name_writer invalid_names)
 {
-    auto flags = load_subsystem_flags(config_path, invalid_names);
-    if (not flags) {
-        return unexpected(flags.error().c_str());
-    }
-    if (SDL_Init(*flags) != 0) {
-        return unexpected(SDL_GetError());
-    }
-    return true;
+    return [&variable_path, invalid_names]
+           (toml::table const & table)
+        -> expected<toml::table, std::string>
+    {
+        std::uint32_t subsystem_flags{};
+        auto result = subtable(table, variable_path)
+            .and_then(load_subsystem_flags("subsystems", subsystem_flags,
+                                                         invalid_names));
+
+        if (SDL_Init(subsystem_flags) != 0) {
+            return unexpected(SDL_GetError());
+        }
+        return table;
+    };
 }
 }

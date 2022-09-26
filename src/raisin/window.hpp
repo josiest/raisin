@@ -9,13 +9,8 @@
 #include <string>
 #include <cstdint>
 
-// data structures/resource handles
-#include <optional>
+// data structures
 #include <unordered_map>
-
-// algorithms
-#include <algorithm>
-#include <iterator>
 
 // serialization
 #define TOML_EXCEPTIONS 0
@@ -24,13 +19,14 @@
 namespace raisin {
 
 /**
- * Initialize SDL with the subsystems defined in a toml config file.
+ * Parse SDL window flags from a toml::table
  *
- * \param config_path - the path to the toml config file
- * \param invalid_names - a place to write any invalid names to
+ * \param variable_path     the toml path to the window parameters
+ * \param flag_output       to write the parsed flag out to
+ * \param invalid_names     a place to write any invalid names to
  *
- * \return the union of the subsystem flags as integers if parsing was
- *         successful.
+ * \return A function that takes a toml::table and returns an expected table
+ *         result such that the parsed flag is written to flag_output.
  *
  * \note Any names that aren't valid subsystems will not be included in the
  *       union, but will be written to invalid_names.
@@ -51,9 +47,9 @@ namespace raisin {
  * - shown
  */
 template<std::weakly_incrementable name_writer>
-expected<std::uint32_t, std::string>
-load_window_flags(std::string const & config_path,
-                  name_writer invalid_names)
+auto load_window_flags(std::string const & variable_path,
+                       std::uint32_t & flag_output,
+                       name_writer invalid_names)
 {
     static std::unordered_map<std::string, std::uint32_t>
     const _as_window_flag{
@@ -70,104 +66,67 @@ load_window_flags(std::string const & config_path,
         { "shown", SDL_WINDOW_SHOWN }
     };
 
-    std::vector<std::string> flags;
-    auto flag_result = load_flag_names(config_path, "window.flags",
-                                       std::back_inserter(flags));
-
-    if (not flag_result) {
-        return unexpected(flag_result.error());
-    }
-    return parse_flags(flags,
-                       [](auto const & name) { return _as_window_flag.contains(name); },
-                       [](auto const & name) { return _as_window_flag.at(name); },
-                       invalid_names);
+    return _flags_from_map(_as_window_flag, variable_path,
+                           flag_output, invalid_names);
 }
 
 /**
- * Create an SDL_Window from a config file.
+ * \brief Create an SDL_Window from toml::table of window parameters.
  *
- * \param config_path - the config filepath
- * \param invalid_flag_names - a place to write any invalid window flag names to
+ * \param variable_path     the toml path to the table of window parameters
+ * \param window_output     a reference to write the window to
+ * \param invalid_flags     a place to write any invalid window flag names
+ *
+ * \return a function taking a toml::table and returns an expected table result
+ *         such that the created window is written to window_output
+ *
+ * \note All invalid window flag names will be written to invalid_flags.
+ *       See documentation for load_window_flags for a list of valid window
+ *       flags.
+ *
+ * toml parameters:
+ *
+ *  string title        REQUIRED
+ *  int width           REQUIRED
+ *  int height          REQUIRED
+ *
+ *  int x               OPTIONAL    defaults to SDL_WINDOWPOS_UNDEFINED
+ *  int y               OPTIONAL    defaults to SDL_WINDOWPOS_UNDEFINED
+ *  list<string> flags  OPTIONAL    the flags to use creating the window
  */
 template<std::weakly_incrementable name_writer>
-expected<SDL_Window *, std::string>
-make_window_from_config(std::string const & config_path,
-                        name_writer invalid_flag_names)
+auto load_window(std::string const & variable_path,
+                 SDL_Window * & window_output,
+                 name_writer invalid_flags)
 {
-    // parse window flags
-    auto flags = load_window_flags(config_path, invalid_flag_names);
-    if (not flags) {
-        return unexpected(flags.error());
-    }
+    return [&variable_path, &window_output, invalid_flags]
+           (toml::table const & table)
+        -> expected<toml::table, std::string>
+    {
+        std::string title{};
+        int x{};
+        int y{};
+        std::uint32_t width{};
+        std::uint32_t height{};
+        std::uint32_t flags{};
 
-    // read config file
-    toml::parse_result table_result = toml::parse_file(config_path);
-    if (not table_result) {
-        return unexpected(std::string(table_result.error().description()));
-    }
-    auto table = std::move(table_result).table();
+        auto result = subtable(table, "window")
+            .and_then(load("title", title))
+            .and_then(load("width", width))
+            .and_then(load("height", height))
+            .and_then(load_window_flags("flags", flags, invalid_flags))
+            .map(load_or_else("x", x,
+                              static_cast<int>(SDL_WINDOWPOS_UNDEFINED)))
+            .map(load_or_else("y", y,
+                              static_cast<int>(SDL_WINDOWPOS_UNDEFINED)));
+        if (not result) { return result; }
 
-    // can't make a window if no window parameters were specified
-    if (not table["window"]) {
-        return unexpected("config at "s + config_path +
-                              "has no window settings"s);
-    }
-    if (not table["window"].is_table()) {
-        return unexpected("window config settings must be a table!"s);
-    }
-    toml::table window = *table["window"].as_table();
-
-    // parse title
-    if (not window["title"]) {
-        return unexpected("window config must have a title!"s);
-    }
-    if (not window["title"].is_string()) {
-        return unexpected("window.title must be a string!"s);
-    }
-    auto const title = window["title"].as_string()->get();
-
-    // parse width
-    if (not window["width"]) {
-        return unexpected("window config must have a width!"s);
-    }
-    
-    if (not window["width"].is_integer()) {
-        return unexpected("window.width must be an integer"s);
-    }
-    std::uint32_t const width = window["width"].as_integer()->get();
-
-    // parse height
-    if (not window["height"]) {
-        return unexpected("window config must have a height!"s);
-    }
-    if (not window["height"].is_integer()) {
-        return unexpected("window.height must be an integer"s);
-    }
-    std::uint32_t const height = window["height"].as_integer()->get();
-
-    // parse x
-    int x = SDL_WINDOWPOS_UNDEFINED;
-    if (window["x"].is_integer()) {
-        x = window["x"].as_integer()->get();
-    }
-    else if (window["x"]) {
-        return unexpected("window.x must be an integer"s);
-    }
-
-    // parse y
-    int y = SDL_WINDOWPOS_UNDEFINED;
-    if (window["y"].is_integer()) {
-        y = window["x"].as_integer()->get();
-    }
-    else if (window["y"]) {
-        return unexpected("window.y must be an integer"s);
-    }
-
-    SDL_Window * sdl_window = SDL_CreateWindow(title.c_str(), x, y,
-                                               width, height, *flags);
-    if (not sdl_window) {
-        return unexpected(SDL_GetError());
-    }
-    return sdl_window;
+        window_output = SDL_CreateWindow(
+                title.c_str(), x, y, width, height, flags);
+        if (not window_output) {
+            return unexpected(SDL_GetError());
+        }
+        return table;
+    };
 }
 }

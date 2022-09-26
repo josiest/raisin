@@ -11,74 +11,16 @@
 // algorithms
 #include <iterator>
 
-// load the subsystem flags from file
-bool init_sdl(std::string const & config_path)
-{
-    using namespace raisin;
-    std::vector<std::string> invalid_names;
-    auto init_result = init_sdl_from_config(
-            config_path,
-            std::back_inserter(invalid_names));
-    for (auto const & name : invalid_names) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_ASSERT,
-            "No subsystem named \"%s\", skipping",
-            name.c_str());
-    }
-    if (init_result) {
-        return true;
-    }
-    // some other error on SDL side occured when initializing
-    SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
-        "Unable to initialize SDL: %s",
-        init_result.error().c_str());
-    return false;
-}
+// i/o
+#include <iostream>
 
-// load the window from config settings
-SDL_Window * load_window(std::string const & config_path)
+void log_bad_flags(std::string const & flag_type,
+                   std::vector<std::string> const & invalid_names)
 {
-    using namespace raisin;
-    std::vector<std::string> invalid_names;
-    auto window_result = make_window_from_config(
-            config_path,
-            std::back_inserter(invalid_names));
     for (auto const & name : invalid_names) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_ASSERT,
-            "No window flag named \"%s\", skipping",
-            name.c_str());
+        std::cerr << "No " << flag_type << " flag named "
+                  << name << ", skipping\n";
     }
-    if (window_result) {
-        return *window_result;
-    }
-    SDL_LogCritical(SDL_LOG_CATEGORY_VIDEO,
-        "Unable to create a window: %s",
-        window_result.error().c_str());
-
-    return nullptr;
-}
-
-// load the renderer from config settings
-SDL_Renderer * load_renderer(SDL_Window * window,
-                             std::string const & config_path)
-{
-    using namespace raisin;
-    // load the renderer from config settings
-    std::vector<std::string> invalid_names;
-    auto renderer_result = make_renderer_from_config(
-            config_path, window,
-            std::back_inserter(invalid_names));
-    for (auto const & name : invalid_names) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_ASSERT,
-            "No renderer flag named \"%s\", skipping",
-            name.c_str());
-    }
-    if (renderer_result) {
-        return *renderer_result;
-    }
-    SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM,
-        "Unable to create a renderer: %s",
-        renderer_result.error().c_str());
-    return nullptr;
 }
 
 void cleanup(SDL_Window * window, SDL_Renderer * renderer)
@@ -94,7 +36,7 @@ void cleanup(SDL_Window * window, SDL_Renderer * renderer)
 
 void draw(SDL_Renderer * renderer)
 {
-    SDL_Color const blue{ 66, 135, 245, 0 };
+    SDL_Color constexpr blue{ 66, 135, 245, 255 };
     SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, blue.a);
     SDL_RenderClear(renderer);
     SDL_RenderPresent(renderer);
@@ -104,18 +46,32 @@ int main()
 {
     std::string const config_path = "../assets/config.toml";
 
-    // load resources;
-    if (not init_sdl(config_path)) {
-        return EXIT_FAILURE;
-    }
-    SDL_Window * const window = load_window(config_path);
-    if (not window) {
-        cleanup(nullptr, nullptr);
-        return EXIT_FAILURE;
-    }
-    SDL_Renderer * const renderer = load_renderer(window, config_path);
-    if (not renderer) {
-        cleanup(window, nullptr);
+    std::vector<std::string> invalid_subsystem_names;
+
+    SDL_Window * window = nullptr;
+    std::vector<std::string> invalid_window_names;
+
+    SDL_Renderer * renderer = nullptr;
+    std::vector<std::string> invalid_renderer_names;
+
+    auto result = raisin::parse_file(config_path)
+        .and_then(raisin::init_sdl(
+            "system",
+            std::back_inserter(invalid_subsystem_names)))
+        .and_then(raisin::load_window(
+            "window", window,
+            std::back_inserter(invalid_window_names)))
+        .and_then(raisin::load_renderer(
+            "renderer", window, renderer,
+            std::back_inserter(invalid_renderer_names)));
+
+    log_bad_flags("subsystem", invalid_subsystem_names);
+    log_bad_flags("window", invalid_window_names);
+    log_bad_flags("renderer", invalid_renderer_names);
+
+    if (not result) {
+        std::cerr << "Couldn't load resources: " << result.error() << "\n";
+        cleanup(window, renderer);
         return EXIT_FAILURE;
     }
 
