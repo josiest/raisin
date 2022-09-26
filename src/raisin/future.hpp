@@ -1,19 +1,21 @@
-// Use standard library features if they're available
-#if __cplusplus > 202002L
-#include <ranges>
 namespace raisin {
 
-namespace ranges = std::ranges;
-namespace views = std::views;
+// Use C++23 standard library features if they're available
+#if __cplusplus > 202300L
+#include <expected>
 
-}
+template<class T, class E>
+using expected = std::expected<T, E>;
+template<class T, class E>
+using unexpected = std::unexpected<T, E>;
+
 // Otherwise use external dependencies
 #else
-#include <range/v3/all.hpp>
+#include <tl/expected.hpp>
+template<class T, class E>
+using expected = tl::expected<T, E>;
+template<class E>
+using unexpected = tl::unexpected<E>;
 
-namespace raisin {
-
-namespace ranges = ranges;
-namespace views = ranges::views;
-}
 #endif
+}

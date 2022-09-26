@@ -1,16 +1,13 @@
 #pragma once
 #include "raisin/future.hpp"
-#include "raisin/parsing.hpp"
+#include "raisin/flags.hpp"
 
 // frameworks
 #include <SDL2/SDL.h>
 
-// data types
+// data types and structures
 #include <string>
 #include <cstdint>
-
-// resource handles
-#include <tl/expected.hpp>
 #include <unordered_map>
 
 // serialization
@@ -38,7 +35,7 @@ namespace raisin {
  * - target-texture
  */
 template<std::weakly_incrementable name_writer>
-tl::expected<std::uint32_t, std::string>
+expected<std::uint32_t, std::string>
 load_renderer_flags(std::string const & config_path,
                     name_writer invalid_names)
 {
@@ -55,7 +52,7 @@ load_renderer_flags(std::string const & config_path,
                                        std::back_inserter(flags));
 
     if (not flag_result) {
-        return tl::unexpected(flag_result.error());
+        return unexpected(flag_result.error());
     }
     return parse_flags(flags,
         [](auto const & name) { return _as_renderer_flag.contains(name); },
@@ -71,7 +68,7 @@ load_renderer_flags(std::string const & config_path,
  * \param invalid_flag_names a place to write any invalid window flag names to
  */
 template<std::weakly_incrementable name_writer>
-tl::expected<SDL_Renderer *, std::string>
+expected<SDL_Renderer *, std::string>
 make_renderer_from_config(std::string const & config_path,
                           SDL_Window * window,
                           name_writer invalid_flag_names)
@@ -79,17 +76,17 @@ make_renderer_from_config(std::string const & config_path,
     // read config file
     toml::parse_result table_result = toml::parse_file(config_path);
     if (not table_result) {
-        return tl::unexpected(std::string(table_result.error().description()));
+        return unexpected(std::string(table_result.error().description()));
     }
     auto table = std::move(table_result).table();
 
     // fail if no renderer parameters were specified
     if (not table["renderer"]) {
-        return tl::unexpected("config at "s + config_path +
+        return unexpected("config at "s + config_path +
                               " has no renderer settings"s);
     }
     if (not table["renderer"].is_table()) {
-        return tl::unexpected("renderer config settings must be a table!"s);
+        return unexpected("renderer config settings must be a table!"s);
     }
     toml::table renderer = *table["renderer"].as_table();
 
@@ -99,18 +96,18 @@ make_renderer_from_config(std::string const & config_path,
         driver_index = renderer["driver_index"].as_integer()->get();
     }
     else if (renderer["driver_index"]) {
-        return tl::unexpected("renderer.driver_index must be an integer"s);
+        return unexpected("renderer.driver_index must be an integer"s);
     }
 
     // parse renderer flags
     auto flags = load_renderer_flags(config_path, invalid_flag_names);
     if (not flags) {
-        return tl::unexpected(flags.error());
+        return unexpected(flags.error());
     }
 
     auto * sdl_renderer = SDL_CreateRenderer(window, driver_index, *flags);
     if (not sdl_renderer) {
-        return tl::unexpected("Couldn't create renderer: "s + SDL_GetError());
+        return unexpected("Couldn't create renderer: "s + SDL_GetError());
     }
     return sdl_renderer;
 }

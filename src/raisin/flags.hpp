@@ -10,14 +10,17 @@
 
 // algorithms
 #include <algorithm>
+#include <numeric>
+#include <functional>
+
+// ranges and concepts
 #include <iterator>
 #include <concepts>
-#include <functional>
+#include <ranges>
 
 // data structures/resource handles
 #include <unordered_map>
 #include <optional>
-#include <tl/expected.hpp>
 
 // serialization
 #define TOML_EXCEPTIONS 0
@@ -33,7 +36,9 @@ std::string
 inline _strlower(std::string const & str)
 {
     auto tolower = [](unsigned char ch) { return std::tolower(ch); };
-    return str | views::transform(tolower) | ranges::to<std::string>();
+    std::string lower;
+    std::ranges::transform(str, std::back_inserter(lower), tolower);
+    return lower;
 }
 
 /**
@@ -46,7 +51,7 @@ inline _strlower(std::string const & str)
  * \return the union of the flags as integers. Any undefined flag names won't be
  *         included in the union, but will be written to invalid_names.
  */
-template<ranges::input_range name_reader,
+template<std::ranges::input_range name_reader,
          std::predicate<std::string> name_validator,
          std::regular_invocable<std::string> name_transformer,
          std::weakly_incrementable name_writer>
@@ -58,18 +63,20 @@ parse_flags(name_reader const & flag_names,
             name_writer invalid_names)
 {
     // make sure all names are lower-case
-    auto lower_names = flag_names | views::transform(_strlower)
-                                  | ranges::to<std::vector>;
+    std::vector<std::string> lower_names;
+    std::ranges::transform(flag_names, std::back_inserter(lower_names),
+                           _strlower);
 
     // write down any invalid names
     auto name_is_invalid = std::not_fn(name_is_valid);
-    ranges::copy_if(lower_names, invalid_names, name_is_invalid);
+    std::ranges::copy_if(lower_names, invalid_names, name_is_invalid);
 
     // transform valid names into flags and join
     auto join = [](std::uint32_t sum, std::uint32_t x) { return sum | x; };
-    return ranges::accumulate(lower_names | views::filter(name_is_valid)
-                                          | views::transform(as_flag),
-                               0u, join);
+    auto to_valid_flags = lower_names | std::views::filter(name_is_valid)
+                                      | std::views::transform(as_flag);
+    return std::accumulate(to_valid_flags.begin(),
+                           to_valid_flags.end(), 0u, join);
 }
 
 /**
@@ -84,20 +91,20 @@ parse_flags(name_reader const & flag_names,
  *         Otherwise, return a parse
  */
 template<std::weakly_incrementable name_writer>
-tl::expected<std::size_t, std::string>
+expected<std::size_t, std::string>
 
 load_flag_names(fs::path const & config_path,
                 std::string const & variable_path,
                 name_writer flag_names)
 {
     if (not fs::exists(config_path)) {
-        return tl::unexpected("no file named "s + config_path.string());
+        return unexpected("no file named "s + config_path.string());
     }
 
     // read the config file, return any parsing errors
     toml::parse_result result = toml::parse_file(config_path.string());
     if (not result) {
-        return tl::unexpected(std::string(result.error().description()));
+        return unexpected(std::string(result.error().description()));
     }
     auto table = std::move(result).table();
 
@@ -108,12 +115,12 @@ load_flag_names(fs::path const & config_path,
     }
     // flag_names must be an array of strings
     if (not flag_node.is_array()) {
-        return tl::unexpected(variable_path + " must be an array"s);
+        return unexpected(variable_path + " must be an array"s);
     }
     auto flags = *flag_node.as_array();
     if (not flags.is_homogeneous(toml::node_type::string)) {
-        return tl::unexpected("all subsytem names in " + variable_path + " "s +
-                              "must be strings"s);
+        return unexpected("all subsytem names in " + variable_path + " "s +
+                          "must be strings"s);
     }
     // copy the flags as strings into the subsystem names
     flags.for_each([&flag_names](toml::value<std::string> const & name) {

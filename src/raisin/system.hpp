@@ -1,6 +1,6 @@
 #pragma once
 #include "raisin/future.hpp"
-#include "raisin/parsing.hpp"
+#include "raisin/flags.hpp"
 
 // low-level frameworks
 #include <SDL2/SDL.h>
@@ -11,7 +11,6 @@
 
 // data structures/resource handles
 #include <optional>
-#include <tl/expected.hpp>
 #include <unordered_map>
 
 // algorithms
@@ -39,7 +38,7 @@ using namespace std::string_literals;
  *       union, but will be written to invalid_names.
  */
 template<std::weakly_incrementable name_writer>
-tl::expected<std::uint32_t, std::string>
+expected<std::uint32_t, std::string>
 load_subsystem_flags(std::string const & config_path,
                      name_writer invalid_names)
 {
@@ -58,7 +57,7 @@ load_subsystem_flags(std::string const & config_path,
                                              std::back_inserter(subsystems));
 
     if (not subsystems_result) {
-        return tl::unexpected(subsystems_result.error());
+        return unexpected(subsystems_result.error());
     }
     return parse_flags(subsystems,
         [](auto const & name) { return _as_subsystem_flag.contains(name); },
@@ -76,16 +75,16 @@ load_subsystem_flags(std::string const & config_path,
  *       to invalid_names.
  */
 template<std::weakly_incrementable name_writer>
-tl::expected<bool, std::string>
+expected<bool, std::string>
 init_sdl_from_config(std::string const & config_path,
                      name_writer invalid_names)
 {
     auto flags = load_subsystem_flags(config_path, invalid_names);
     if (not flags) {
-        return tl::unexpected(flags.error().c_str());
+        return unexpected(flags.error().c_str());
     }
     if (SDL_Init(*flags) != 0) {
-        return tl::unexpected(SDL_GetError());
+        return unexpected(SDL_GetError());
     }
     return true;
 }

@@ -1,6 +1,6 @@
 #pragma once
 #include "raisin/future.hpp"
-#include "raisin/parsing.hpp"
+#include "raisin/flags.hpp"
 
 // low-level frameworks
 #include <SDL2/SDL.h>
@@ -11,7 +11,6 @@
 
 // data structures/resource handles
 #include <optional>
-#include <tl/expected.hpp>
 #include <unordered_map>
 
 // algorithms
@@ -52,7 +51,7 @@ namespace raisin {
  * - shown
  */
 template<std::weakly_incrementable name_writer>
-tl::expected<std::uint32_t, std::string>
+expected<std::uint32_t, std::string>
 load_window_flags(std::string const & config_path,
                   name_writer invalid_names)
 {
@@ -76,7 +75,7 @@ load_window_flags(std::string const & config_path,
                                        std::back_inserter(flags));
 
     if (not flag_result) {
-        return tl::unexpected(flag_result.error());
+        return unexpected(flag_result.error());
     }
     return parse_flags(flags,
                        [](auto const & name) { return _as_window_flag.contains(name); },
@@ -91,58 +90,58 @@ load_window_flags(std::string const & config_path,
  * \param invalid_flag_names - a place to write any invalid window flag names to
  */
 template<std::weakly_incrementable name_writer>
-tl::expected<SDL_Window *, std::string>
+expected<SDL_Window *, std::string>
 make_window_from_config(std::string const & config_path,
                         name_writer invalid_flag_names)
 {
     // parse window flags
     auto flags = load_window_flags(config_path, invalid_flag_names);
     if (not flags) {
-        return tl::unexpected(flags.error());
+        return unexpected(flags.error());
     }
 
     // read config file
     toml::parse_result table_result = toml::parse_file(config_path);
     if (not table_result) {
-        return tl::unexpected(std::string(table_result.error().description()));
+        return unexpected(std::string(table_result.error().description()));
     }
     auto table = std::move(table_result).table();
 
     // can't make a window if no window parameters were specified
     if (not table["window"]) {
-        return tl::unexpected("config at "s + config_path +
+        return unexpected("config at "s + config_path +
                               "has no window settings"s);
     }
     if (not table["window"].is_table()) {
-        return tl::unexpected("window config settings must be a table!"s);
+        return unexpected("window config settings must be a table!"s);
     }
     toml::table window = *table["window"].as_table();
 
     // parse title
     if (not window["title"]) {
-        return tl::unexpected("window config must have a title!"s);
+        return unexpected("window config must have a title!"s);
     }
     if (not window["title"].is_string()) {
-        return tl::unexpected("window.title must be a string!"s);
+        return unexpected("window.title must be a string!"s);
     }
     auto const title = window["title"].as_string()->get();
 
     // parse width
     if (not window["width"]) {
-        return tl::unexpected("window config must have a width!"s);
+        return unexpected("window config must have a width!"s);
     }
     
     if (not window["width"].is_integer()) {
-        return tl::unexpected("window.width must be an integer"s);
+        return unexpected("window.width must be an integer"s);
     }
     std::uint32_t const width = window["width"].as_integer()->get();
 
     // parse height
     if (not window["height"]) {
-        return tl::unexpected("window config must have a height!"s);
+        return unexpected("window config must have a height!"s);
     }
     if (not window["height"].is_integer()) {
-        return tl::unexpected("window.height must be an integer"s);
+        return unexpected("window.height must be an integer"s);
     }
     std::uint32_t const height = window["height"].as_integer()->get();
 
@@ -152,7 +151,7 @@ make_window_from_config(std::string const & config_path,
         x = window["x"].as_integer()->get();
     }
     else if (window["x"]) {
-        return tl::unexpected("window.x must be an integer"s);
+        return unexpected("window.x must be an integer"s);
     }
 
     // parse y
@@ -161,13 +160,13 @@ make_window_from_config(std::string const & config_path,
         y = window["x"].as_integer()->get();
     }
     else if (window["y"]) {
-        return tl::unexpected("window.y must be an integer"s);
+        return unexpected("window.y must be an integer"s);
     }
 
     SDL_Window * sdl_window = SDL_CreateWindow(title.c_str(), x, y,
                                                width, height, *flags);
     if (not sdl_window) {
-        return tl::unexpected(SDL_GetError());
+        return unexpected(SDL_GetError());
     }
     return sdl_window;
 }
