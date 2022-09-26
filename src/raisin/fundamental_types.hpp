@@ -12,6 +12,11 @@
 #include <toml++/toml.h>
 #include <filesystem>
 
+// type constraints
+#include <concepts>
+#include <type_traits>
+#include <typeinfo>
+
 using namespace std::string_literals;
 
 namespace raisin {
@@ -70,6 +75,8 @@ subtable(toml::table const & table, std::string const & name)
  *         is successful.
  */
 template<typename value_t>
+    requires (std::is_arithmetic_v<value_t> or
+              std::convertible_to<value_t, std::string>)
 auto load(std::string const & name, value_t & val)
 {
     return [&name, &val](toml::table const & table)
@@ -86,8 +93,8 @@ auto load(std::string const & name, value_t & val)
         std::optional<value_t> value_result =
                 table_result->at_path(name).value<value_t>();
         if (not value_result) {
-            return tl::unexpected("Expecting "s + name + " to be another "s +
-                                  "type"s);
+            return tl::unexpected("Expecting "s + name + " to be " +
+                                  typeid(val).name() + ", but it wasn't"s);
         }
 
         val = *value_result;
