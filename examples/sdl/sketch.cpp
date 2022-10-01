@@ -47,23 +47,20 @@ int main()
     std::string const config_path = "../assets/config.toml";
 
     std::vector<std::string> invalid_subsystem_names;
+    auto write_subsystems = std::back_inserter(invalid_subsystem_names);
 
     SDL_Window * window = nullptr;
     std::vector<std::string> invalid_window_names;
+    auto write_window_flags = std::back_inserter(invalid_window_names);
 
     SDL_Renderer * renderer = nullptr;
     std::vector<std::string> invalid_renderer_names;
+    auto write_renderer_flags = std::back_inserter(invalid_renderer_names);
 
     auto result = raisin::parse_file(config_path)
-        .and_then(raisin::init_sdl(
-            "system",
-            std::back_inserter(invalid_subsystem_names)))
-        .and_then(raisin::load_window(
-            "window", window,
-            std::back_inserter(invalid_window_names)))
-        .and_then(raisin::load_renderer(
-            "renderer", window, renderer,
-            std::back_inserter(invalid_renderer_names)));
+        .and_then(raisin::init_sdl("system", write_subsystems))
+        .and_then(raisin::load_window("window", window, write_window_flags))
+        .and_then(raisin::load_renderer("renderer", window, renderer, write_renderer_flags));
 
     log_bad_flags("subsystem", invalid_subsystem_names);
     log_bad_flags("window", invalid_window_names);

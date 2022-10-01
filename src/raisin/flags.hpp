@@ -94,11 +94,8 @@ _flags_from_map(std::unordered_map<std::string, std::uint32_t> const & flagmap,
         -> expected<toml::table, std::string>
     {
         std::vector<std::string> flags;
-        auto load_flags = load_array<std::string>(
-                variable_path,
-                std::back_inserter(flags));
-
-        auto result = load_flags(table);
+        auto result = load_array<std::string>(table, variable_path,
+                                              std::back_inserter(flags));
         if (not result) { return result; }
 
         auto flag_exists = [&flagmap](auto const & name) {

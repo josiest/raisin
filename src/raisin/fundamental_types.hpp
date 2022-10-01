@@ -1,5 +1,6 @@
 #pragma once
 #include "raisin/future.hpp"
+#include <functional>
 
 // data types
 #include <string>
@@ -17,12 +18,14 @@
 #include <type_traits>
 #include <typeinfo>
 
+#include <functional>
+
 using namespace std::string_literals;
 
 namespace raisin {
 
 template<typename value_t>
-concept toml_readable = (std::is_arithmetic_v<value_t> or
+concept native_type = (std::is_arithmetic_v<value_t> or
                          std::convertible_to<std::string, value_t>);
 
 // node type for non-readables is none
@@ -58,7 +61,7 @@ struct toml_node_type<value_t> :
     public std::integral_constant<toml::node_type,
                                   toml::node_type::string> {};
 
-template<toml_readable value_t>
+template<native_type value_t>
 toml::node_type constexpr toml_node_type_v = toml_node_type<value_t>::value;
 
 /**
@@ -73,125 +76,183 @@ toml::node_type constexpr toml_node_type_v = toml_node_type<value_t>::value;
  *       descriptive fail conditions, and returns an expected result rather
  *       than toml::parse_result.
  */
-tl::expected<toml::table, std::string>
+expected<toml::table, std::string>
 parse_file(std::string const & config_path)
 {
     if (not std::filesystem::exists(config_path)) {
-        return tl::unexpected("Expecting config at "s + config_path +
+        return unexpected("Expecting config at "s + config_path +
                               ", but the file doesn't exist"s);
     }
 
     toml::parse_result table_result = toml::parse_file(config_path);
     if (not table_result) {
-        return tl::unexpected(std::string(table_result.error().description()));
+        return unexpected(std::string(table_result.error().description()));
     }
     return table_result.table();
 }
 
-/**
- * \brief Determine if a toml::table has an attribute
- *
- * \param name the attribute to query
- *
- * \return a function taking a toml::table and returning an expected result
- */
-auto has_attribute(std::string const & name)
+expected<toml::table, std::string>
+validate_variable(toml::table const & table, std::string const & variable_path)
 {
-    return [&name](toml::table const & table)
-        -> tl::expected<toml::table, std::string>
-    {
-        if (not table.at_path(name)) {
-            return tl::unexpected("Expecting an attribute named "s + name +
-                                  ", but there was none"s);
-        }
-        return table;
-    };
+    if (not table.at_path(variable_path)) {
+        return unexpected("Expected the variable "s + variable_path + " to "s +
+                          "exist, but it doesn't"s);
+    }
+    return table;
 }
 
 /**
  * \brief Get a subtable of a toml::table
  *
- * \param table the table to get a subtable from
- * \param name the name of the subtable
+ * \param table             the table to load a subtable from
+ * \param variable_path     the toml path to the subtable
  *
- * \return An expected result of the subtable, or the error message on failure
+ * \return The subtable, or a descriptive message if failed
  */
-tl::expected<toml::table, std::string>
-subtable(toml::table const & table, std::string const & name)
+expected<toml::table, std::string>
+subtable(toml::table const & table, std::string const & variable_path)
 {
     // make sure the table has the subtable attribute name
-    auto validate_attribute = has_attribute(name);
-    auto result = validate_attribute(table);
-    if (not result) { return result; }
+    auto result = validate_variable(table, variable_path);
+    if (not result) { return unexpected(result.error()); }
 
     // make sure the subtable is indeed a table
-    toml::table const * sub = table.at_path(name).as_table();
-    if (not sub) {
-        return tl::unexpected("Expecting "s + name + " to be a table"s +
-                              ", but it wasn't"s);
+    toml::table const * subtable = table.at_path(variable_path).as_table();
+    if (not subtable) {
+        return unexpected("Expecting "s + variable_path + " to be a table"s +
+                          ", but it wasn't"s);
     }
-    return *sub;
+    return *subtable;
 }
 
 /**
- * \brief Load an arithmetic or string-type value
+ * \brief Load a native value
  *
- * \param name the attribute name in the table
- * \param val a reference to store the value in
+ * \param table             the table to load data from
+ * \param variable_path     the toml path to the variable to load
+ *
+ * \return the loaded value, or a descriptive error message on failure
+ */
+template<native_type value_t>
+expected<value_t, std::string>
+load_value(toml::table const & table, std::string const & variable_path)
+{
+    auto table_result = validate_variable(table, variable_path);
+    if (not table_result) {
+        return unexpected(table_result.error());
+    }
+
+    std::optional<value_t> value_result =
+        table_result->at_path(variable_path).value<value_t>();
+    if (not value_result) {
+        return unexpected("Expecting "s + variable_path + " to have type "s +
+                          typeid(value_t).name() + " but it doesn't"s);
+    }
+    return *value_result;
+}
+
+/**
+ * \brief Load a native_type
+ *
+ * \param variable_path     the toml path to the variable to load
+ * \param output            where to write the loaded value to
  *
  * \return a function taking a toml::table and returning an expected table
  *         result, such that the target value is written to val when loading
  *         is successful.
  */
-template<toml_readable value_t>
-auto load(std::string const & name, value_t & val)
+template<native_type value_t>
+auto load(std::string const & variable_path, value_t & output)
 {
-    return [&name, &val](toml::table const & table)
-        -> tl::expected<toml::table, std::string>
+    return [&variable_path, &output](toml::table const & table)
+        -> expected<toml::table, std::string>
     {
-        // make sure the attribute exists in the table
-        auto validate_attribute = has_attribute(name);
-        auto table_result = validate_attribute(table);
-        if (not table_result) {
-            return table_result;
-        }
-
-        // make sure the attribute is a valid type
-        std::optional<value_t> value_result =
-                table_result->at_path(name).value<value_t>();
-        if (not value_result) {
-            return tl::unexpected("Expecting "s + name + " to be " +
-                                  typeid(val).name() + ", but it wasn't"s);
-        }
-
-        val = *value_result;
-        return table_result;
-    };
-}
-
-/**
- * \brief Load an arithmetic or string-type value or use a default
- *
- * \param name          the toml path to the value to load
- * \param val           a reference to write the value to
- * \param default_val   the default value to use on failure
- *
- * \return a function taking a toml::table and returning an expected table
- *         result, such that the target value is written to val when loading
- *         is successful.
- */
-template<toml_readable value_t>
-auto load_or_else(std::string const & name, value_t & val, value_t default_val)
-{
-    return [&name, &val, default_val](toml::table const & table)
-    {
-        auto load_val = load(name, val);
-        auto result = load_val(table);
+        auto result = load_value<value_t>(table, variable_path);
         if (not result) {
-            val = default_val;
+            return unexpected(result.error());
         }
+        output = *result;
         return table;
     };
+}
+
+/**
+ * \brief Load a native type
+ *
+ * \param table             the table to load from
+ * \param variable_path     the toml path to the value to load
+ * \param default_val       the default value to use on failure
+ *
+ * \return The loaded value, or default value when unsuccsessful
+ */
+template<native_type value_t>
+value_t load_value_or_else(toml::table const & table,
+                           std::string const & variable_path,
+                           value_t default_val)
+{
+    auto result = load_value<value_t>(table, variable_path);
+    if (not result) {
+        return default_val;
+    }
+    return *result;
+}
+
+/**
+ * \brief Load a native type
+ *
+ * \param variable_path     the toml path to the value to load
+ * \param output            a reference to write the value to
+ * \param default_val       the default value to use on failure
+ *
+ * \return a function that takes a table and returns a table, such that output
+ *         is written to by the loaded value, or by default_val when
+ *         unsuccessful.
+ */
+template<native_type value_t>
+auto load_or_else(std::string const & variable_path,
+                  value_t & output,
+                  value_t default_val)
+{
+    return [&variable_path, &output, default_val]
+           (toml::table const & table)
+    {
+        output = load_value_or_else(table, variable_path, default_val);
+        return table;
+    };
+}
+
+/**
+ * \breif Load an array of native types
+ *
+ * \param table             the table with the array to load
+ * \param variable_path     the toml path to the array
+ * \param to_array          where to write values to
+ */
+template<native_type value_t,
+         std::weakly_incrementable output_to_array>
+
+expected<toml::table, std::string>
+load_array(toml::table const & table, std::string const & variable_path,
+           output_to_array to_array)
+{
+    auto result = validate_variable(table, variable_path);
+    if (not result) {
+        return unexpected(result.error());
+    }
+    auto node = table.at_path(variable_path);
+    if (not node.is_array()) {
+        return unexpected(variable_path + " must be an array"s);
+    }
+    auto arr = *node.as_array();
+    if (not arr.is_homogeneous(toml_node_type_v<value_t>)) {
+        return unexpected("all values in " + variable_path + " "s +
+                          "must be homegeneous"s);
+    }
+    using inserted_t = toml::inserted_type_of<value_t>;
+    arr.for_each([&to_array](inserted_t const & value) {
+        *to_array++ = static_cast<value_t>(value.get());
+    });
+    return table;
 }
 
 /**
@@ -204,34 +265,14 @@ auto load_or_else(std::string const & name, value_t & val, value_t default_val)
  *         specified at variable_path to the to_array output
  *
  */
-template<toml_readable value_t,
+template<native_type value_t,
          std::weakly_incrementable output_to_array>
+   requires (not native_type<output_to_array>)
 
-auto load_array(std::string const & variable_path,
-                output_to_array to_array)
+auto load(std::string const & variable_path,
+          output_to_array to_array)
 {
-    return [&variable_path, &to_array](toml::table const & table)
-        -> expected<toml::table, std::string>
-    {
-        auto node = table.at_path(variable_path);
-        if (not node) {
-            return unexpected("No value has been specified at "s +
-                              variable_path);
-        }
-        if (not node.is_array()) {
-            return unexpected(variable_path + " must be an array"s);
-        }
-        auto arr = *node.as_array();
-        if (not arr.is_homogeneous(toml_node_type_v<value_t>)) {
-            return unexpected("all values in " + variable_path + " "s +
-                              "must be homegeneous"s);
-        }
-        using inserted_t = toml::inserted_type_of<value_t>;
-        arr.for_each([&to_array](inserted_t const & name) {
-            *to_array = name.get();
-            ++to_array;
-        });
-        return table;
-    };
+    using namespace std::placeholders;
+    return std::bind(load_array, _2, variable_path, _3, to_array);
 }
 }
