@@ -1,5 +1,6 @@
 // frameworkds
-#include "raisin/raisin.hpp"
+#include <raisin/raisin.hpp>
+#include <raisin/sdl.hpp>
 #include <SDL2/SDL.h>
 
 // data types
@@ -58,9 +59,9 @@ int main()
     auto write_renderer_flags = std::back_inserter(invalid_renderer_names);
 
     auto result = raisin::parse_file(config_path)
-        .and_then(raisin::init_sdl("system", write_subsystems))
-        .and_then(raisin::load_window("window", window, write_window_flags))
-        .and_then(raisin::load_renderer("renderer", window, renderer, write_renderer_flags));
+        .and_then(raisin::sdl::init_sdl("system", write_subsystems))
+        .and_then(raisin::sdl::load_window("window", window, write_window_flags))
+        .and_then(raisin::sdl::load_renderer("renderer", window, renderer, write_renderer_flags));
 
     log_bad_flags("subsystem", invalid_subsystem_names);
     log_bad_flags("window", invalid_window_names);

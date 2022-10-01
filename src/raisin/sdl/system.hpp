@@ -15,21 +15,24 @@
 
 // algorithms
 #include <algorithm>
+#include <functional>
+
+// type constraints
 #include <iterator>
+#include <concepts>
 
 // serialization
 #define TOML_EXCEPTIONS 0
 #include <toml++/toml.h>
 
-namespace raisin {
-
-using namespace std::string_literals;
+namespace raisin::sdl {
 
 /**
- * \brief Load SDL subsystem flags from a config file.
+ * \brief Load SDL subsystem flags.
  *
- * \param config_path - the path to the toml config file
- * \param invalid_names - a place to write any invalid names to
+ * \param table             the table with the flags
+ * \param variable_path     the toml path to the variable to load
+ * \param invalid_names     a place to write any invalid names to
  *
  * \return the union of the subsystem flags as integers if parsing was
  *         successful.
@@ -37,10 +40,13 @@ using namespace std::string_literals;
  * \note Any names that aren't valid subsystems will not be included in the
  *       union, but will be written to invalid_names.
  */
-template<std::weakly_incrementable name_writer>
-auto load_subsystem_flags(std::string const & variable_path,
-                          std::uint32_t flag_output,
-                          name_writer invalid_names)
+template<std::unsigned_integral flag_t,
+         std::weakly_incrementable name_output_t>
+
+expected<flag_t, std::string>
+load_subsystem_flags(toml::table const & table,
+                     std::string const & variable_path,
+                     name_output_t into_invalid_names)
 {
 
     static std::unordered_map<std::string, std::uint32_t>
@@ -52,8 +58,41 @@ auto load_subsystem_flags(std::string const & variable_path,
         { "events", SDL_INIT_EVENTS }, { "everything", SDL_INIT_EVERYTHING }
     };
 
-    return _flags_from_map(_as_subsystem_flag, variable_path,
-                           flag_output, invalid_names);
+    return _flags_from_map(table, _as_subsystem_flag,
+                           variable_path, into_invalid_names);
+}
+
+/**
+ * \brief Load SDL subsystem flags
+ *
+ * \param variable_path         the toml path to the flags
+ * \param output                a reference to write the flags to
+ * \param into_invalid_names    to write any invalid names to
+ *
+ * \return a function taking a table and returning an expected table result,
+ *         such that the flags are written to output when loading succeeds.
+ */
+template<std::unsigned_integral flag_t,
+         std::weakly_incrementable name_output_t>
+
+auto load_subsystem_flags(std::string const & variable_path,
+                          flag_t & output,
+                          name_output_t into_invalid_names)
+{
+    return [&variable_path, &output, into_invalid_names]
+           (toml::table const & table)
+        -> expected<toml::table, std::string>
+    {
+        auto result = load_subsystem_flags<flag_t>(
+                table, variable_path,
+                into_invalid_names);
+
+        if (not result) {
+            return unexpected(result.error());
+        }
+        output = *result;
+        return table;
+    };
 }
 
 /**

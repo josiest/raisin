@@ -82,30 +82,29 @@ parse_flags(name_reader const & flag_names,
                            to_valid_flags.end(), 0u, join);
 }
 
-template<std::weakly_incrementable name_writer>
-auto
-_flags_from_map(std::unordered_map<std::string, std::uint32_t> const & flagmap,
-                std::string const & variable_path,
-                std::uint32_t & flag_output,
-                name_writer invalid_names)
-{
-    return [&flagmap, &flag_output, &variable_path, invalid_names]
-           (toml::table const & table)
-        -> expected<toml::table, std::string>
-    {
-        std::vector<std::string> flags;
-        auto result = load_array<std::string>(table, variable_path,
-                                              std::back_inserter(flags));
-        if (not result) { return result; }
+template<std::unsigned_integral flag_t,
+         std::weakly_incrementable name_output_t>
 
-        auto flag_exists = [&flagmap](auto const & name) {
-            return flagmap.contains(name);
-        };
-        auto as_flag = [&flagmap](auto const & name) {
-            return flagmap.at(name);
-        };
-        flag_output = parse_flags(flags, flag_exists, as_flag, invalid_names);
-        return result;
+expected<flag_t, std::string>
+_flags_from_map(toml::table const & table,
+                std::unordered_map<std::string, flag_t> const & flagmap,
+                std::string const & variable_path,
+                name_output_t into_invalid_names)
+{
+    std::vector<std::string> flags;
+    auto result = load_array<std::string>(table, variable_path,
+                                          std::back_inserter(flags));
+    if (not result) {
+        return unexpected(result.error());
+    }
+
+    auto flag_exists = [&flagmap](auto const & name) {
+        return flagmap.contains(name);
     };
+    auto as_flag = [&flagmap](auto const & name) {
+        return flagmap.at(name);
+    };
+
+    return parse_flags(flags, flag_exists, as_flag, into_invalid_names);
 }
 }

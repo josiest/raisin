@@ -14,7 +14,7 @@
 #define TOML_EXCEPTIONS 0
 #include <toml++/toml.h>
 
-namespace raisin {
+namespace raisin::sdl {
 
 /**
  * Initialize SDL with the subsystems defined in a toml config file.
@@ -35,10 +35,13 @@ namespace raisin {
  * - present-vsync
  * - target-texture
  */
-template<std::weakly_incrementable name_writer>
-auto load_renderer_flags(std::string const & variable_path,
-                         std::uint32_t & flag_output,
-                         name_writer invalid_names)
+template<std::unsigned_integral flag_t,
+         std::weakly_incrementable name_output_t>
+
+expected<flag_t, std::string>
+load_renderer_flags(toml::table const & table,
+                    std::string const & variable_path,
+                    name_output_t into_invalid_names)
 {
     static std::unordered_map<std::string, std::uint32_t>
     const _as_renderer_flag{
@@ -48,8 +51,8 @@ auto load_renderer_flags(std::string const & variable_path,
         { "target-texture", SDL_RENDERER_TARGETTEXTURE },
     };
 
-    return _flags_from_map(_as_renderer_flag, variable_path,
-                           flag_output, invalid_names);
+    return _flags_from_map(table, _as_renderer_flag,
+                           variable_path, into_invalid_names);
 }
 
 /**
@@ -85,17 +88,21 @@ auto load_renderer(std::string const & variable_path,
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
-        int driver_index{};
-        std::uint32_t renderer_flags{};
-
+        int driver_index;
         auto result = subtable(table, variable_path)
-            .and_then(load_renderer_flags("flags", renderer_flags,
-                                          invalid_flag_names))
             .map(load_or_else("driver_index", driver_index, -1));
         if (not result) { return result; }
 
-        renderer_output = SDL_CreateRenderer(
-                window, driver_index, renderer_flags);
+        // TODO: add monadic overload
+        using namespace std::string_literals;
+        auto flag_result = load_renderer_flags<std::uint32_t>(
+                table, variable_path + ".flags"s, invalid_flag_names);
+        if (not flag_result) {
+            return unexpected(flag_result.error());
+        }
+        std::uint32_t const flags = *flag_result;
+
+        renderer_output = SDL_CreateRenderer(window, driver_index, flags);
         if (not renderer_output) {
             return unexpected(SDL_GetError());
         }
