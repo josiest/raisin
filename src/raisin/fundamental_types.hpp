@@ -25,31 +25,31 @@ using namespace std::string_literals;
 namespace raisin {
 
 template<typename value_t>
-concept native_type = (std::is_arithmetic_v<value_t> or
-                         std::convertible_to<std::string, value_t>);
+concept native = (std::is_arithmetic_v<value_t> or
+                  std::convertible_to<std::string, value_t>);
 
 // node type for non-readables is none
 template<typename value_t>
-struct toml_node_type :
+struct node_type :
     public std::integral_constant<toml::node_type,
                                   toml::node_type::none> {};
 
 // node type for bools
 template<>
-struct toml_node_type<bool> :
+struct node_type<bool> :
     public std::integral_constant<toml::node_type,
                                   toml::node_type::boolean> {};
 
 // node type for integers
 template<std::integral value_t>
     requires (not std::same_as<value_t, bool>) // to avoid ambiguity
-struct toml_node_type<value_t> :
+struct node_type<value_t> :
     public std::integral_constant<toml::node_type,
                                   toml::node_type::integer> {};
 
 // node type for floating points
 template<std::floating_point value_t>
-struct toml_node_type<value_t> :
+struct node_type<value_t> :
     public std::integral_constant<toml::node_type,
                                   toml::node_type::floating_point> {};
 
@@ -57,12 +57,12 @@ struct toml_node_type<value_t> :
 template<typename value_t>
     requires (std::convertible_to<std::string, value_t> and
               (not std::is_arithmetic_v<value_t>))
-struct toml_node_type<value_t> :
+struct node_type<value_t> :
     public std::integral_constant<toml::node_type,
                                   toml::node_type::string> {};
 
-template<native_type value_t>
-toml::node_type constexpr toml_node_type_v = toml_node_type<value_t>::value;
+template<native value_t>
+toml::node_type constexpr node_type_v = node_type<value_t>::value;
 
 /**
  * \brief Parse a toml file into an expected table result
@@ -133,7 +133,7 @@ subtable(toml::table const & table, std::string const & variable_path)
  *
  * \return the loaded value, or a descriptive error message on failure
  */
-template<native_type value_t>
+template<native value_t>
 expected<value_t, std::string>
 load_value(toml::table const & table, std::string const & variable_path)
 {
@@ -152,7 +152,7 @@ load_value(toml::table const & table, std::string const & variable_path)
 }
 
 /**
- * \brief Load a native_type
+ * \brief Load a native
  *
  * \param variable_path     the toml path to the variable to load
  * \param output            where to write the loaded value to
@@ -161,7 +161,7 @@ load_value(toml::table const & table, std::string const & variable_path)
  *         result, such that the target value is written to val when loading
  *         is successful.
  */
-template<native_type value_t>
+template<native value_t>
 auto load(std::string const & variable_path, value_t & output)
 {
     return [&variable_path, &output](toml::table const & table)
@@ -185,7 +185,7 @@ auto load(std::string const & variable_path, value_t & output)
  *
  * \return The loaded value, or default value when unsuccsessful
  */
-template<native_type value_t>
+template<native value_t>
 value_t load_value_or_else(toml::table const & table,
                            std::string const & variable_path,
                            value_t default_val)
@@ -208,7 +208,7 @@ value_t load_value_or_else(toml::table const & table,
  *         is written to by the loaded value, or by default_val when
  *         unsuccessful.
  */
-template<native_type value_t>
+template<native value_t>
 auto load_or_else(std::string const & variable_path,
                   value_t & output,
                   value_t default_val)
@@ -228,7 +228,7 @@ auto load_or_else(std::string const & variable_path,
  * \param variable_path     the toml path to the array
  * \param to_array          where to write values to
  */
-template<native_type value_t,
+template<native value_t,
          std::weakly_incrementable output_to_array>
 
 expected<toml::table, std::string>
@@ -244,7 +244,7 @@ load_array(toml::table const & table, std::string const & variable_path,
         return unexpected(variable_path + " must be an array"s);
     }
     auto arr = *node.as_array();
-    if (not arr.is_homogeneous(toml_node_type_v<value_t>)) {
+    if (not arr.is_homogeneous(node_type_v<value_t>)) {
         return unexpected("all values in " + variable_path + " "s +
                           "must be homegeneous"s);
     }
@@ -265,9 +265,9 @@ load_array(toml::table const & table, std::string const & variable_path,
  *         specified at variable_path to the to_array output
  *
  */
-template<native_type value_t,
+template<native value_t,
          std::weakly_incrementable output_to_array>
-   requires (not native_type<output_to_array>)
+   requires (not native<output_to_array>)
 
 auto load(std::string const & variable_path,
           output_to_array to_array)
