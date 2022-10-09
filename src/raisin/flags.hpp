@@ -107,4 +107,26 @@ _flags_from_map(toml::table const & table,
 
     return parse_flags(flags, flag_exists, as_flag, into_invalid_names);
 }
+
+template<std::unsigned_integral flag_t,
+         std::weakly_incrementable name_output_t,
+         std::invocable<toml::table, std::string, name_output_t> load_fn>
+
+auto _load_flags(load_fn && load_flags,
+                 std::string const & variable_path,
+                 flag_t & output,
+                 name_output_t into_invalid_names)
+{
+    return [&load_flags, &variable_path, &output, into_invalid_names]
+           (toml::table const & table)
+        -> expected<toml::table, std::string>
+    {
+        auto result = load_flags(table, variable_path, into_invalid_names);
+        if (not result) {
+            return unexpected(result.error());
+        }
+        output = *result;
+        return table;
+    };
+}
 }

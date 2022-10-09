@@ -45,14 +45,35 @@ load_renderer_flags(toml::table const & table,
 {
     static std::unordered_map<std::string, std::uint32_t>
     const _as_renderer_flag{
-        { "software", SDL_RENDERER_SOFTWARE },
-        { "accelerated", SDL_RENDERER_ACCELERATED },
-        { "present-vsync", SDL_RENDERER_PRESENTVSYNC },
+        { "software",       SDL_RENDERER_SOFTWARE },
+        { "accelerated",    SDL_RENDERER_ACCELERATED },
+        { "present-vsync",  SDL_RENDERER_PRESENTVSYNC },
         { "target-texture", SDL_RENDERER_TARGETTEXTURE },
     };
 
     return _flags_from_map(table, _as_renderer_flag,
                            variable_path, into_invalid_names);
+}
+
+/**
+ * \brief Load SDL renderer flags
+ *
+ * \param variable_path         the toml path to the flags
+ * \param flag_output           a reference to write the flags to
+ * \param into_invalid_names    to write any invalid names to
+ *
+ * \return a function taking a table and returning an expected table result,
+ *         such that the flags are written to output when loading succeeds.
+ */
+template<std::unsigned_integral flag_t,
+         std::weakly_incrementable name_output_t>
+
+auto load_renderer_flags_into(std::string const & variable_path,
+                              flag_t & flag_output,
+                              name_output_t into_invalid_names)
+{
+    return _load_flags(load_renderer_flags<flag_t, name_output_t>,
+                       variable_path, flag_output, into_invalid_names);
 }
 
 /**
@@ -78,29 +99,24 @@ load_renderer_flags(toml::table const & table,
  *  int driver_index    OPTIONAL    the index of the video driver
  *                                  defaults to the first available (-1)
  */
-template<std::weakly_incrementable name_writer>
+template<std::weakly_incrementable name_output_t>
 auto load_renderer(std::string const & variable_path,
                    SDL_Window * window,
                    SDL_Renderer * & renderer_output,
-                   name_writer invalid_flag_names)
+                   name_output_t into_invalid_names)
 {
-    return [&variable_path, &renderer_output, window, invalid_flag_names]
+    return [&renderer_output, window, &variable_path, into_invalid_names]
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
+        std::uint32_t flags;
         int driver_index;
         auto result = subtable(table, variable_path)
+            .and_then(load_renderer_flags_into(
+                "flags", flags, into_invalid_names))
             .map(load_or_else("driver_index", driver_index, -1));
-        if (not result) { return result; }
 
-        // TODO: add monadic overload
-        using namespace std::string_literals;
-        auto flag_result = load_renderer_flags<std::uint32_t>(
-                table, variable_path + ".flags"s, invalid_flag_names);
-        if (not flag_result) {
-            return unexpected(flag_result.error());
-        }
-        std::uint32_t const flags = *flag_result;
+        if (not result) { return result; }
 
         renderer_output = SDL_CreateRenderer(window, driver_index, flags);
         if (not renderer_output) {

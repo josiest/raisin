@@ -23,13 +23,13 @@ namespace raisin::sdl {
  *
  * \param table                 the table with the window parameters
  * \param variable_path         the toml path to the window flags
- * \param into_invalid_names    a place to write any invalid names to
+ * \param into_invalid_flags    a place to write any invalid names to
  *
  * \return The table when loading succeeds, otherwise a descriptive error
  *         message.
  *
  * \note Any names that aren't valid subsystems will not be included in the
- *       union, but will be written into_invalid_names.
+ *       union, but will be written into_invalid_flags.
  *
  * Acceptable flag names:
  * - fullscreen
@@ -52,7 +52,7 @@ template<std::unsigned_integral flag_t,
 expected<flag_t, std::string>
 load_window_flags(toml::table const & table,
                   std::string const & variable_path,
-                  name_output_t into_invalid_names)
+                  name_output_t into_invalid_flags)
 {
     static std::unordered_map<std::string, std::uint32_t>
     const _as_window_flag{
@@ -72,20 +72,41 @@ load_window_flags(toml::table const & table,
     };
 
     return _flags_from_map(table, _as_window_flag,
-                           variable_path, into_invalid_names);
+                           variable_path, into_invalid_flags);
+}
+
+/**
+ * \brief Load SDL window flags
+ *
+ * \param variable_path         the toml path to the flags
+ * \param flag_output           a reference to write the flags to
+ * \param into_invalid_flags    to write any invalid names to
+ *
+ * \return a function taking a table and returning an expected table result,
+ *         such that the flags are written to output when loading succeeds.
+ */
+template<std::unsigned_integral flag_t,
+         std::weakly_incrementable name_output_t>
+
+auto load_window_flags_into(std::string const & variable_path,
+                            flag_t & flag_output,
+                            name_output_t into_invalid_flags)
+{
+    return _load_flags(load_window_flags<flag_t, name_output_t>,
+                       variable_path, flag_output, into_invalid_flags);
 }
 
 /**
  * \brief Create an SDL_Window from toml::table of window parameters.
  *
- * \param variable_path     the toml path to the table of window parameters
- * \param window_output     a reference to write the window to
- * \param invalid_flags     a place to write any invalid window flag names
+ * \param variable_path         the toml path to the table of window parameters
+ * \param window_output         a reference to write the window to
+ * \param into_invalid_flags    a place to write any invalid window flag names
  *
  * \return a function taking a toml::table and returns an expected table result
  *         such that the created window is written to window_output
  *
- * \note All invalid window flag names will be written to invalid_flags.
+ * \note All invalid window flag names will be written into_invalid_flags.
  *       See documentation for load_window_flags for a list of valid window
  *       flags.
  *
@@ -99,37 +120,30 @@ load_window_flags(toml::table const & table,
  *  int y               OPTIONAL    defaults to SDL_WINDOWPOS_UNDEFINED
  *  list<string> flags  OPTIONAL    the flags to use creating the window
  */
-template<std::weakly_incrementable name_writer>
+template<std::weakly_incrementable name_output_t>
 auto load_window(std::string const & variable_path,
                  SDL_Window * & window_output,
-                 name_writer invalid_flags)
+                 name_output_t into_invalid_flags)
 {
-    return [&variable_path, &window_output, invalid_flags]
+    return [&variable_path, &window_output, into_invalid_flags]
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
         std::string title;
         int x, y;
-        std::uint32_t width, height;
+        std::uint32_t width, height, flags;
         int constexpr anywhere = static_cast<int>(SDL_WINDOWPOS_UNDEFINED);
 
         auto result = subtable(table, variable_path)
             .and_then(load("title", title))
             .and_then(load("width", width))
             .and_then(load("height", height))
+            .and_then(load_window_flags_into(
+                "flags", flags, into_invalid_flags))
             .map(load_or_else("x", x, anywhere))
             .map(load_or_else("y", y, anywhere));
 
         if (not result) { return result; }
-
-        // TODO: make monadic overload of this fn
-        using namespace std::string_literals;
-        auto flag_result = load_window_flags<std::uint32_t>(
-                table, variable_path + ".flags"s, invalid_flags);
-        if (not flag_result) {
-            return unexpected(flag_result.error());
-        }
-        std::uint32_t const flags = *flag_result;
 
         window_output = SDL_CreateWindow(
                 title.c_str(), x, y, width, height, flags);
