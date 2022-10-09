@@ -9,3 +9,6 @@ flags = ["input-grabbed", "fulscreen-laptop"]
 
 [renderer]
 flags = ["accelerated", "reduced-speed"]
+
+[draw]
+color = [ 66, 135, 245 ]

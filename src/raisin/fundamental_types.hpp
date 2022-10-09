@@ -80,23 +80,29 @@ expected<toml::table, std::string>
 parse_file(std::string const & config_path)
 {
     if (not std::filesystem::exists(config_path)) {
-        return unexpected("Expecting config at "s + config_path +
-                              ", but the file doesn't exist"s);
+        std::string const description =
+            "Expecting config at "s + config_path + ", "s
+            "but the file doesn't exist"s;
+        return unexpected{ description };
     }
 
-    toml::parse_result table_result = toml::parse_file(config_path);
+    toml::parse_result const table_result = toml::parse_file(config_path);
     if (not table_result) {
-        return unexpected(std::string(table_result.error().description()));
+        std::string const description{ table_result.error().description() };
+        return unexpected{ description };
     }
     return table_result.table();
 }
 
 expected<toml::table, std::string>
-validate_variable(toml::table const & table, std::string const & variable_path)
+validate_variable(toml::table const & table,
+                  std::string const & variable_path)
 {
     if (not table.at_path(variable_path)) {
-        return unexpected("Expected the variable "s + variable_path + " to "s +
-                          "exist, but it doesn't"s);
+        std::string const description =
+            "Expected the variable "s + variable_path + " to exist, "s +
+            "but it doesn't"s;
+        return unexpected{ description };
     }
     return table;
 }
@@ -119,10 +125,21 @@ subtable(toml::table const & table, std::string const & variable_path)
     // make sure the subtable is indeed a table
     toml::table const * subtable = table.at_path(variable_path).as_table();
     if (not subtable) {
-        return unexpected("Expecting "s + variable_path + " to be a table"s +
-                          ", but it wasn't"s);
+        std::string const description =
+            "Expecting "s + variable_path + " to be a table, "s +
+            "but it wasn't"s;
+        return unexpected{ description };
     }
     return *subtable;
+}
+
+template<typename value_t>
+expected<value_t, std::string>
+load_value(toml::table const & table, std::string const & variable_path)
+{
+    std::string const & description =
+        "Loading for type "s + typeid(value_t).name() + " is undefined"s;
+    return unexpected{ description };
 }
 
 /**
@@ -142,14 +159,22 @@ load_value(toml::table const & table, std::string const & variable_path)
         return unexpected(table_result.error());
     }
 
-    std::optional<value_t> value_result =
-        table_result->at_path(variable_path).value<value_t>();
+    auto value_result = table.at_path(variable_path).value<value_t>();
     if (not value_result) {
-        return unexpected("Expecting "s + variable_path + " to have type "s +
-                          typeid(value_t).name() + " but it doesn't"s);
+        std::string const description =
+            "Expecting "s + variable_path + " to have type "s +
+            typeid(value_t).name() + ", but it doesn't"s;
+        return unexpected{ description };
     }
     return *value_result;
 }
+
+template<typename value_t>
+concept value = requires(toml::table const & table,
+                         std::string const & variable_path) {
+    { load_value<value_t>(table, variable_path) }
+      -> std::same_as<expected<value_t, std::string>>;
+};
 
 /**
  * \brief Load a native
@@ -161,7 +186,7 @@ load_value(toml::table const & table, std::string const & variable_path)
  *         result, such that the target value is written to val when loading
  *         is successful.
  */
-template<native value_t>
+template<value value_t>
 auto load(std::string const & variable_path, value_t & output)
 {
     return [&variable_path, &output](toml::table const & table)
