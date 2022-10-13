@@ -51,6 +51,9 @@ std::string _strlower(std::string const & str)
  * \param as_flag           transforms a flag name into an integer
  * \param invalid_names     a place to write invalid names to
  *
+ * \note names in flag names will be transformed to lowercase and rearranged
+ *       so that all invalid flag names are at the end of the array.
+ *
  * \return the union of the flags as integers. Any undefined flag names won't be
  *         included in the union, but will be written to invalid_names.
  */
@@ -64,7 +67,7 @@ requires (std::convertible_to<std::ranges::range_value_t<input>,
           std::integral<std::invoke_result_t<projection, std::string>>)
 
 std::invoke_result_t<projection, std::string>
-parse_flags(input const & flag_names,
+parse_flags(input && flag_names,
             predicate name_is_valid,
             projection as_flag,
             output && invalid_names)
@@ -72,12 +75,10 @@ parse_flags(input const & flag_names,
     namespace ranges = std::ranges;
 
     // make sure all names are lower-case
-    std::array<std::string, MAX_FLAGS> lower_names;
-    auto limited_names = std::views::counted(flag_names.begin(), MAX_FLAGS);
-    ranges::transform(limited_names, lower_names.begin(), _strlower);
+    ranges::transform(flag_names, flag_names.begin(), _strlower);
 
     // write down any invalid names
-    auto invalid_parsed = ranges::partition(lower_names, name_is_valid);
+    auto invalid_parsed = ranges::partition(flag_names, name_is_valid);
     auto const N = std::min(ranges::size(invalid_parsed),
                             ranges::size(invalid_names));
 
@@ -87,7 +88,7 @@ parse_flags(input const & flag_names,
 
     // transform valid names into flags and join
     using flag_t = std::invoke_result_t<projection, std::string>;
-    return std::transform_reduce(ranges::begin(lower_names),
+    return std::transform_reduce(ranges::begin(flag_names),
                                  ranges::begin(invalid_parsed),
                                  0u, std::bit_or<flag_t>{}, as_flag);
 }
