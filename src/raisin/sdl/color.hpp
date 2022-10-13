@@ -12,8 +12,51 @@
 // deserialization
 #define TOML_EXCEPTIONS 0
 #include <toml++/toml.h>
+#include <span>
 
-namespace raisin {
+inline namespace raisin {
+
+constexpr std::size_t
+size(SDL_Color const & color)
+{
+    return 4;
+}
+
+constexpr std::uint8_t *
+data(SDL_Color & color)
+{
+    return &color.r;
+}
+
+constexpr std::uint8_t const *
+data(SDL_Color const & color)
+{
+    return &color.r;
+}
+
+inline constexpr std::uint8_t *
+begin(SDL_Color & color)
+{
+    return &color.r;
+}
+
+inline constexpr std::uint8_t const *
+begin(SDL_Color const & color)
+{
+    return &color.r;
+}
+
+inline constexpr std::uint8_t *
+end(SDL_Color & color)
+{
+    return (&color.a) + 1;
+}
+
+inline constexpr std::uint8_t const *
+end(SDL_Color const & color)
+{
+    return (&color.a) + 1;
+}
 
 template<>
 expected<SDL_Color, std::string>
@@ -21,14 +64,10 @@ load_value<SDL_Color>(toml::table const & table,
                       std::string const & variable_path)
 {
     SDL_Color color;
-    std::uint8_t * const begin_color = &color.r;
-
-    auto color_result = load_array<std::uint8_t>(
-        table, variable_path, begin_color);
-    if (not color_result) {
-        return unexpected{ color_result.error() };
+    auto load_result = load_array(table, variable_path, color);
+    if (not load_result) {
+        return unexpected{ load_result.error() };
     }
-
     return color;
 }
 }

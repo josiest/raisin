@@ -1,24 +1,28 @@
-// frameworkds
+// frameworks
+#include <SDL2/SDL.h>
 #include <raisin/raisin.hpp>
 #include <raisin/sdl.hpp>
-#include <SDL2/SDL.h>
 
 // data types
 #include <string>
 
-// resource handles
-#include <vector>
+// type constraints
+#include <ranges>
 
-// algorithms
+// data structures and algorithms
+#include <array>
 #include <iterator>
 
 // i/o
 #include <iostream>
 
-void log_bad_flags(std::string const & flag_type,
-                   std::vector<std::string> const & invalid_names)
+namespace ranges = std::ranges;
+
+template<ranges::input_range range>
+requires std::same_as<ranges::range_value_t<range>, std::string>
+void log_bad_flags(std::string const & flag_type, range && invalid_names)
 {
-    for (auto const & name : invalid_names) {
+    for (std::string const & name : invalid_names) {
         std::cerr << "No " << flag_type << " flag named "
                   << name << ", skipping\n";
     }
@@ -46,26 +50,21 @@ int main()
 {
     std::string const config_path = "../assets/config.toml";
 
-    std::vector<std::string> invalid_subsystem_names;
-    auto write_subsystems = std::back_inserter(invalid_subsystem_names);
-
     SDL_Window * window = nullptr;
-    std::vector<std::string> invalid_window_names;
-    auto write_window_flags = std::back_inserter(invalid_window_names);
-
     SDL_Renderer * renderer = nullptr;
-    std::vector<std::string> invalid_renderer_names;
-    auto write_renderer_flags = std::back_inserter(invalid_renderer_names);
+
+    std::array<std::string, raisin::MAX_FLAGS> invalid_subsystem_names;
+    std::array<std::string, raisin::MAX_FLAGS> invalid_window_names;
+    std::array<std::string, raisin::MAX_FLAGS> invalid_renderer_names;
 
     SDL_Color draw_color;
-
     auto result = raisin::parse_file(config_path)
         .and_then(raisin::sdl::init_sdl(
-            "system", write_subsystems))
+            "system", invalid_subsystem_names))
         .and_then(raisin::sdl::load_window(
-            "window", window, write_window_flags))
+            "window", window, invalid_window_names))
         .and_then(raisin::sdl::load_renderer(
-            "renderer", window, renderer, write_renderer_flags))
+            "renderer", window, renderer, invalid_renderer_names))
         .and_then(raisin::load(
             "draw.color", draw_color));
 

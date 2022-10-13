@@ -41,16 +41,16 @@ namespace raisin::sdl {
  *       union, but will be written to invalid_names.
  */
 template<std::unsigned_integral flag_t,
-         std::weakly_incrementable name_output_t>
+         output_range<std::string> name_output>
 
 expected<flag_t, std::string>
 load_subsystem_flags(toml::table const & table,
                      std::string const & variable_path,
-                     name_output_t into_invalid_names)
+                     name_output && invalid_names)
 {
 
     static std::unordered_map<std::string, std::uint32_t>
-    const _as_subsystem_flag{
+    const as_subsystem_flag{
         { "timer",              SDL_INIT_TIMER },
         { "audio",              SDL_INIT_AUDIO },
         { "video",              SDL_INIT_VIDEO },
@@ -61,8 +61,8 @@ load_subsystem_flags(toml::table const & table,
         { "everything",         SDL_INIT_EVERYTHING }
     };
 
-    return _flags_from_map(table, _as_subsystem_flag,
-                           variable_path, into_invalid_names);
+    return _flags_from_map(as_subsystem_flag, table, variable_path,
+                           std::forward<name_output>(invalid_names));
 }
 
 /**
@@ -70,20 +70,21 @@ load_subsystem_flags(toml::table const & table,
  *
  * \param variable_path         the toml path to the flags
  * \param flag_output           a reference to write the flags to
- * \param into_invalid_names    to write any invalid names to
+ * \param invalid_names    to write any invalid names to
  *
  * \return a function taking a table and returning an expected table result,
  *         such that the flags are written to output when loading succeeds.
  */
 template<std::unsigned_integral flag_t,
-         std::weakly_incrementable name_output_t>
+         output_range<std::string> name_output>
 
 auto load_subsystem_flags_into(std::string const & variable_path,
                                flag_t & flag_output,
-                               name_output_t into_invalid_names)
+                               name_output && invalid_names)
 {
-    return _load_flags(load_subsystem_flags<flag_t, name_output_t>,
-                       variable_path, flag_output, into_invalid_names);
+    return _load_flags(load_subsystem_flags<flag_t, name_output>,
+                       variable_path, flag_output,
+                       std::forward<name_output>(invalid_names));
 }
 
 /**
@@ -95,20 +96,24 @@ auto load_subsystem_flags_into(std::string const & variable_path,
  * \note Any names that aren't valid subsystems will be skipped over and written
  *       to invalid_names.
  */
-template<std::weakly_incrementable name_output_t>
+template<output_range<std::string> name_output>
 auto init_sdl(std::string const & variable_path,
-              name_output_t into_invalid_names)
+              name_output && invalid_names)
 {
-    return [&variable_path, into_invalid_names]
+    return [&variable_path, &invalid_names]
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
-        std::uint32_t subsystem_flags;
+        std::uint32_t flags;
         auto result = subtable(table, variable_path)
-            .and_then(load_subsystem_flags_into(
-                "subsystems", subsystem_flags, into_invalid_names));
+            .and_then( load_subsystem_flags_into(
+                "subsystems", flags,
+                std::forward<name_output>(invalid_names)));
 
-        if (SDL_Init(subsystem_flags) != 0) {
+        if (not result) {
+            return result;
+        }
+        if (SDL_Init(flags) != 0) {
             return unexpected(SDL_GetError());
         }
         return table;

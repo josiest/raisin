@@ -1,28 +1,31 @@
 #pragma once
 #include "raisin/future.hpp"
-#include <functional>
 
 // data types
 #include <string>
-
-// resource handles
-#include <optional>
 
 // deserialization
 #define TOML_EXCEPTIONS 0
 #include <toml++/toml.h>
 #include <filesystem>
+#include <span>
 
 // type constraints
 #include <concepts>
 #include <type_traits>
 #include <typeinfo>
 
+// algorithms
+#include <ranges>
+#include <iterator>
 #include <functional>
+
+// i/o
+#include <sstream>
 
 using namespace std::string_literals;
 
-namespace raisin {
+inline namespace raisin {
 
 template<typename value_t>
 concept native = (std::is_arithmetic_v<value_t> or
@@ -210,10 +213,10 @@ auto load(std::string const & variable_path, value_t & output)
  *
  * \return The loaded value, or default value when unsuccsessful
  */
-template<native value_t>
+template<value value_t>
 value_t load_value_or_else(toml::table const & table,
                            std::string const & variable_path,
-                           value_t default_val)
+                           value_t const & default_val)
 {
     auto result = load_value<value_t>(table, variable_path);
     if (not result) {
@@ -233,10 +236,10 @@ value_t load_value_or_else(toml::table const & table,
  *         is written to by the loaded value, or by default_val when
  *         unsuccessful.
  */
-template<native value_t>
+template<value value_t>
 auto load_or_else(std::string const & variable_path,
                   value_t & output,
-                  value_t default_val)
+                  value_t const & default_val)
 {
     return [&variable_path, &output, default_val]
            (toml::table const & table)
@@ -246,58 +249,60 @@ auto load_or_else(std::string const & variable_path,
     };
 }
 
+template<typename range_t>
+concept opaque_output_range = (
+    std::ranges::output_range<range_t, std::ranges::range_value_t<range_t>> and
+    value<std::ranges::range_value_t<range_t>>);
+
+template<typename range_t, typename value_t>
+concept output_range = std::ranges::output_range<range_t, value_t> and
+                       value<value_t>;
+
 /**
- * \breif Load an array of native types
+ * \brief Load an array of native types
  *
  * \param table             the table with the array to load
  * \param variable_path     the toml path to the array
- * \param to_array          where to write values to
+ * \param into_array        where to write values to
+ *
+ * \return the iterator to the next unwritten element
  */
-template<native value_t,
-         std::weakly_incrementable output_to_array>
-
-expected<toml::table, std::string>
-load_array(toml::table const & table, std::string const & variable_path,
-           output_to_array to_array)
+template<opaque_output_range range_t>
+expected<std::ranges::iterator_t<range_t>, std::string>
+load_array(toml::table const & table,
+           std::string const & variable_path,
+           range_t && array)
 {
+    namespace ranges = std::ranges;
     auto result = validate_variable(table, variable_path);
     if (not result) {
         return unexpected(result.error());
     }
     auto node = table.at_path(variable_path);
     if (not node.is_array()) {
-        return unexpected(variable_path + " must be an array"s);
+        std::string const description = variable_path + " must be an array"s;
+        return unexpected{ description };
     }
     auto arr = *node.as_array();
-    if (not arr.is_homogeneous(node_type_v<value_t>)) {
-        return unexpected("all values in " + variable_path + " "s +
-                          "must be homegeneous"s);
+    using value_t = ranges::range_value_t<range_t>;
+    // if (not arr.is_homogeneous(node_type_v<value_t>)) {
+    //     std::string const description =
+    //         "all values in "s + variable_path + " must be homegeneous"s;
+    //     return unexpected{ description };
+    // }
+    if (arr.size() > ranges::size(array)) {
+        std::string const description =
+            variable_path + " can have at most "s +
+            std::to_string(ranges::size(array)) +
+            " items, but it has "s + std::to_string(arr.size());
+        return unexpected{ description };
     }
+
     using inserted_t = toml::inserted_type_of<value_t>;
-    arr.for_each([&to_array](inserted_t const & value) {
-        *to_array++ = static_cast<value_t>(value.get());
+    auto * it = ranges::begin(array);
+    arr.for_each([&it](inserted_t const & value) {
+        *it++ = static_cast<value_t>(value.get());
     });
-    return table;
-}
-
-/**
- * \brief Load an array of arithemtic or string-type values
- *
- * \param variable_path     the toml variable path to load from
- * \param to_array          where to write values to
- *
- * \return A function that takes a toml::table and writes values
- *         specified at variable_path to the to_array output
- *
- */
-template<native value_t,
-         std::weakly_incrementable output_to_array>
-   requires (not native<output_to_array>)
-
-auto load(std::string const & variable_path,
-          output_to_array to_array)
-{
-    using namespace std::placeholders;
-    return std::bind(load_array, _2, variable_path, _3, to_array);
+    return it;
 }
 }
