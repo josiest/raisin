@@ -285,6 +285,7 @@ load_array(toml::table const & table,
     }
     auto arr = *node.as_array();
     using value_t = ranges::range_value_t<range_t>;
+    // TODO: make this work for non-native types
     // if (not arr.is_homogeneous(node_type_v<value_t>)) {
     //     std::string const description =
     //         "all values in "s + variable_path + " must be homegeneous"s;

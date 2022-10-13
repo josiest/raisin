@@ -101,10 +101,13 @@ _flags_from_map(std::unordered_map<std::string, flag_t> const & flagmap,
                 std::string const & variable_path,
                 name_output && invalid_names)
 {
+    namespace ranges = std::ranges;
+
+    // load the array of flag names
     std::array<std::string, MAX_FLAGS> flag_names;
-    auto result = load_array(table, variable_path, flag_names);
-    if (not result) {
-        return unexpected(result.error());
+    auto iter_result = load_array(table, variable_path, flag_names);
+    if (not iter_result) {
+        return unexpected(iter_result.error());
     }
 
     auto is_flag = [&flagmap](auto const & name) {
@@ -114,7 +117,10 @@ _flags_from_map(std::unordered_map<std::string, flag_t> const & flagmap,
         return flagmap.at(name);
     };
 
-    return parse_flags(flag_names, is_flag, as_flag,
+    // parse the loaded names into flags
+    auto loaded_names = ranges::subrange(ranges::begin(flag_names),
+                                         *iter_result);
+    return parse_flags(loaded_names, is_flag, as_flag,
                        std::forward<name_output>(invalid_names));
 }
 
