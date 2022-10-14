@@ -46,7 +46,7 @@ std::string _strlower(std::string const & str)
 template<std::unsigned_integral flag_t, std::ranges::range input>
 struct flag_result {
     flag_t value;
-    std::ranges::subrange<std::ranges::iterator_t<input>> invalid_names;
+    std::ranges::borrowed_subrange_t<input> invalid_names;
 };
 
 /**
