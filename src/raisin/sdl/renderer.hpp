@@ -36,14 +36,15 @@ namespace raisin::sdl {
  * - target-texture
  */
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output>
+         std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 
 expected<flag_t, std::string>
 load_renderer_flags(toml::table const & table,
                     std::string const & variable_path,
-                    name_output && invalid_names)
+                    name_output into_invalid_names)
 {
-    static std::unordered_map<std::string, std::uint32_t>
+    static std::unordered_map<std::string, flag_t>
     const as_renderer_flag{
         { "software",       SDL_RENDERER_SOFTWARE },
         { "accelerated",    SDL_RENDERER_ACCELERATED },
@@ -51,9 +52,8 @@ load_renderer_flags(toml::table const & table,
         { "target-texture", SDL_RENDERER_TARGETTEXTURE },
     };
 
-    return _flags_from_map(as_renderer_flag,
-                           table, variable_path,
-                           std::forward<name_output>(invalid_names));
+    return _flags_from_map(as_renderer_flag, table, variable_path,
+                           into_invalid_names);
 }
 
 /**
@@ -67,15 +67,15 @@ load_renderer_flags(toml::table const & table,
  *         such that the flags are written to output when loading succeeds.
  */
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output>
+         std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 
 auto load_renderer_flags_into(std::string const & variable_path,
                               flag_t & flag_output,
-                              name_output && invalid_names)
+                              name_output into_invalid_names)
 {
     return _load_flags(load_renderer_flags<flag_t, name_output>,
-                       variable_path, flag_output,
-                       std::forward<name_output>(invalid_names));
+                       variable_path, flag_output, into_invalid_names);
 }
 
 /**
@@ -101,22 +101,23 @@ auto load_renderer_flags_into(std::string const & variable_path,
  *  int driver_index    OPTIONAL    the index of the video driver
  *                                  defaults to the first available (-1)
  */
-template<output_range<std::string> name_output>
+template<std::weakly_incrementable name_output,
+         std::unsigned_integral flag_t = std::uint32_t>
+requires std::indirectly_writable<name_output, std::string>
 auto load_renderer(std::string const & variable_path,
                    SDL_Window * window,
                    SDL_Renderer * & renderer_output,
-                   name_output && invalid_names)
+                   name_output into_invalid_names)
 {
-    return [&renderer_output, window, &variable_path, &invalid_names]
+    return [&renderer_output, window, &variable_path, into_invalid_names]
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
-        std::uint32_t flags;
+        flag_t flags;
         int driver_index;
         auto result = subtable(table, variable_path)
             .and_then(load_renderer_flags_into(
-                "flags", flags,
-                std::forward<name_output>(invalid_names)))
+                "flags", flags, into_invalid_names))
             .map(load_or_else("driver_index", driver_index, -1));
 
         if (not result) { return result; }

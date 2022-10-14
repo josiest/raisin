@@ -41,12 +41,13 @@ namespace raisin::sdl {
  *       union, but will be written to invalid_names.
  */
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output>
+         std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 
 expected<flag_t, std::string>
 load_subsystem_flags(toml::table const & table,
                      std::string const & variable_path,
-                     name_output && invalid_names)
+                     name_output into_invalid_names)
 {
 
     static std::unordered_map<std::string, std::uint32_t>
@@ -62,7 +63,7 @@ load_subsystem_flags(toml::table const & table,
     };
 
     return _flags_from_map(as_subsystem_flag, table, variable_path,
-                           std::forward<name_output>(invalid_names));
+                           into_invalid_names);
 }
 
 /**
@@ -76,15 +77,16 @@ load_subsystem_flags(toml::table const & table,
  *         such that the flags are written to output when loading succeeds.
  */
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output>
+         std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 
 auto load_subsystem_flags_into(std::string const & variable_path,
                                flag_t & flag_output,
-                               name_output && invalid_names)
+                               name_output into_invalid_names)
 {
     return _load_flags(load_subsystem_flags<flag_t, name_output>,
                        variable_path, flag_output,
-                       std::forward<name_output>(invalid_names));
+                       into_invalid_names);
 }
 
 /**
@@ -96,19 +98,19 @@ auto load_subsystem_flags_into(std::string const & variable_path,
  * \note Any names that aren't valid subsystems will be skipped over and written
  *       to invalid_names.
  */
-template<output_range<std::string> name_output>
+template<std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 auto init_sdl(std::string const & variable_path,
-              name_output && invalid_names)
+              name_output into_invalid_names)
 {
-    return [&variable_path, &invalid_names]
+    return [&variable_path, into_invalid_names]
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
         std::uint32_t flags;
         auto result = subtable(table, variable_path)
             .and_then( load_subsystem_flags_into(
-                "subsystems", flags,
-                std::forward<name_output>(invalid_names)));
+                "subsystems", flags, into_invalid_names));
 
         if (not result) {
             return result;

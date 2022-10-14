@@ -53,24 +53,24 @@ int main()
     SDL_Window * window = nullptr;
     SDL_Renderer * renderer = nullptr;
 
-    std::array<std::string, raisin::MAX_FLAGS> invalid_subsystem_names;
-    std::array<std::string, raisin::MAX_FLAGS> invalid_window_names;
-    std::array<std::string, raisin::MAX_FLAGS> invalid_renderer_names;
+    std::vector<std::string> invalid_subsystem_flagnames;
+    std::vector<std::string> invalid_window_flagnames;
+    std::vector<std::string> invalid_renderer_flagnames;
 
     SDL_Color draw_color;
     auto result = raisin::parse_file(config_path)
-        .and_then(raisin::sdl::init_sdl(
-            "system", invalid_subsystem_names))
-        .and_then(raisin::sdl::load_window(
-            "window", window, invalid_window_names))
-        .and_then(raisin::sdl::load_renderer(
-            "renderer", window, renderer, invalid_renderer_names))
+        .and_then(raisin::sdl::init_sdl("system",
+            std::back_inserter(invalid_subsystem_flagnames)))
+        .and_then(raisin::sdl::load_window("window", window,
+            std::back_inserter(invalid_window_flagnames)))
+        .and_then(raisin::sdl::load_renderer("renderer", window, renderer,
+            std::back_inserter(invalid_renderer_flagnames)))
         .and_then(raisin::load(
             "draw.color", draw_color));
 
-    log_bad_flags("subsystem", invalid_subsystem_names);
-    log_bad_flags("window", invalid_window_names);
-    log_bad_flags("renderer", invalid_renderer_names);
+    log_bad_flags("subsystem", invalid_subsystem_flagnames);
+    log_bad_flags("window", invalid_window_flagnames);
+    log_bad_flags("renderer", invalid_renderer_flagnames);
 
     if (not result) {
         std::cerr << "Couldn't load resources: " << result.error() << "\n";

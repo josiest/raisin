@@ -47,12 +47,13 @@ namespace raisin::sdl {
  * - shown
  */
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output>
+         std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 
 expected<flag_t, std::string>
 load_window_flags(toml::table const & table,
                   std::string const & variable_path,
-                  name_output && invalid_names)
+                  name_output into_invalid_names)
 {
     static std::unordered_map<std::string, flag_t>
     const as_window_flag{
@@ -72,7 +73,7 @@ load_window_flags(toml::table const & table,
     };
 
     return _flags_from_map(as_window_flag, table, variable_path,
-                           std::forward<name_output>(invalid_names));
+                           into_invalid_names);
 }
 
 /**
@@ -86,15 +87,15 @@ load_window_flags(toml::table const & table,
  *         such that the flags are written to output when loading succeeds.
  */
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output>
+         std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 
 auto load_window_flags_into(std::string const & variable_path,
                             flag_t & flag_output,
-                            name_output && invalid_names)
+                            name_output into_invalid_names)
 {
     return _load_flags(load_window_flags<flag_t, name_output>,
-                       variable_path, flag_output,
-                       std::forward<name_output>(invalid_names));
+                       variable_path, flag_output, into_invalid_names);
 }
 
 /**
@@ -121,12 +122,13 @@ auto load_window_flags_into(std::string const & variable_path,
  *  int y               OPTIONAL    defaults to SDL_WINDOWPOS_UNDEFINED
  *  array<string> flags OPTIONAL    the flags to use creating the window
  */
-template<output_range<std::string> name_output>
+template<std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 auto load_window(std::string const & variable_path,
                  SDL_Window * & window_output,
-                 name_output && invalid_names)
+                 name_output into_invalid_names)
 {
-    return [&variable_path, &window_output, &invalid_names]
+    return [&variable_path, &window_output, into_invalid_names]
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
@@ -140,8 +142,7 @@ auto load_window(std::string const & variable_path,
             .and_then(load("width", width))
             .and_then(load("height", height))
             .and_then(load_window_flags_into(
-                "flags", flags,
-                std::forward<name_output>(invalid_names)))
+                "flags", flags, into_invalid_names))
             .map(load_or_else("x", x, anywhere))
             .map(load_or_else("y", y, anywhere));
 

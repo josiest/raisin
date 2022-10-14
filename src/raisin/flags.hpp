@@ -91,13 +91,14 @@ parse_flags(input && flag_names, predicate is_flag, projection as_flag)
 }
 
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output>
+         std::weakly_incrementable name_output>
+requires std::indirectly_writable<name_output, std::string>
 
 expected<flag_t, std::string>
 _flags_from_map(std::unordered_map<std::string, flag_t> const & flagmap,
                 toml::table const & table,
                 std::string const & variable_path,
-                name_output && invalid_names)
+                name_output into_invalid_names)
 {
     namespace ranges = std::ranges;
 
@@ -121,29 +122,27 @@ _flags_from_map(std::unordered_map<std::string, flag_t> const & flagmap,
     auto flag_result = parse_flags(loaded_names, is_flag, as_flag);
 
     // write down any invalid names
-    auto N = std::min(ranges::size(invalid_names),
-                      ranges::size(flag_result.invalid_names));
-    ranges::copy_n(ranges::begin(flag_result.invalid_names), N,
-                   ranges::begin(invalid_names));
+    ranges::copy(flag_result.invalid_names, into_invalid_names);
     return flag_result.value;
 }
 
 template<std::unsigned_integral flag_t,
-         output_range<std::string> name_output,
+         std::weakly_incrementable name_output,
          std::invocable<toml::table, std::string, name_output> load_fn>
+requires std::indirectly_writable<name_output, std::string>
 
 auto _load_flags(load_fn && load_flags,
                  std::string const & variable_path,
                  flag_t & output,
-                 name_output && invalid_names)
+                 name_output into_invalid_names)
 {
-    return [&load_flags, &variable_path, &output, &invalid_names]
+    return [&load_flags, &variable_path, &output, into_invalid_names]
            (toml::table const & table)
         -> expected<toml::table, std::string>
     {
         auto result = std::invoke(std::forward<load_fn>(load_flags),
                                   table, variable_path,
-                                  std::forward<name_output>(invalid_names));
+                                  into_invalid_names);
         if (not result) {
             return unexpected(result.error());
         }
