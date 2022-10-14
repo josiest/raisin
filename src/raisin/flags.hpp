@@ -43,6 +43,12 @@ std::string _strlower(std::string const & str)
     return lower;
 }
 
+template<std::unsigned_integral flag_t, std::ranges::range input>
+struct flag_result {
+    flag_t value;
+    std::ranges::subrange<std::ranges::iterator_t<input>> invalid_names;
+};
+
 /**
  * Parse a range of flag names names into a single integer flag
  *
@@ -57,40 +63,31 @@ std::string _strlower(std::string const & str)
  * \return the union of the flags as integers. Any undefined flag names won't be
  *         included in the union, but will be written to invalid_names.
  */
-template<std::ranges::input_range input,
+template<std::ranges::forward_range input,
          std::predicate<std::string> predicate,
-         std::regular_invocable<std::string> projection,
-         output_range<std::string> output>
+         std::regular_invocable<std::string> projection>
 
-requires (std::convertible_to<std::ranges::range_value_t<input>,
+requires (std::permutable<std::ranges::iterator_t<input>> and
+          std::convertible_to<std::ranges::range_value_t<input>,
                               std::string> and
           std::integral<std::invoke_result_t<projection, std::string>>)
 
-std::invoke_result_t<projection, std::string>
-parse_flags(input && flag_names,
-            predicate name_is_valid,
-            projection as_flag,
-            output && invalid_names)
+flag_result<std::invoke_result_t<projection, std::string>, input>
+parse_flags(input && flag_names, predicate is_flag, projection as_flag)
 {
     namespace ranges = std::ranges;
 
-    // make sure all names are lower-case
+    // partition invalid names to the end
     ranges::transform(flag_names, flag_names.begin(), _strlower);
-
-    // write down any invalid names
-    auto invalid_parsed = ranges::partition(flag_names, name_is_valid);
-    auto const N = std::min(ranges::size(invalid_parsed),
-                            ranges::size(invalid_names));
-
-    auto from_invalid_parsed = ranges::begin(invalid_parsed);
-    auto into_invalid_names = ranges::begin(invalid_names);
-    ranges::copy_n(from_invalid_parsed, N, into_invalid_names);
+    auto invalid_names = ranges::partition(flag_names, is_flag);
 
     // transform valid names into flags and join
     using flag_t = std::invoke_result_t<projection, std::string>;
-    return std::transform_reduce(ranges::begin(flag_names),
-                                 ranges::begin(invalid_parsed),
-                                 0u, std::bit_or<flag_t>{}, as_flag);
+    flag_t const value = std::transform_reduce(
+            ranges::begin(flag_names), ranges::begin(invalid_names),
+            0u, std::bit_or<flag_t>{}, as_flag);
+
+    return { value, invalid_names };
 }
 
 template<std::unsigned_integral flag_t,
@@ -121,8 +118,14 @@ _flags_from_map(std::unordered_map<std::string, flag_t> const & flagmap,
     // parse the loaded names into flags
     auto loaded_names = ranges::subrange(ranges::begin(flag_names),
                                          *iter_result);
-    return parse_flags(loaded_names, is_flag, as_flag,
-                       std::forward<name_output>(invalid_names));
+    auto flag_result = parse_flags(loaded_names, is_flag, as_flag);
+
+    // write down any invalid names
+    auto N = std::min(ranges::size(invalid_names),
+                      ranges::size(flag_result.invalid_names));
+    ranges::copy_n(ranges::begin(flag_result.invalid_names), N,
+                   ranges::begin(invalid_names));
+    return flag_result.value;
 }
 
 template<std::unsigned_integral flag_t,
