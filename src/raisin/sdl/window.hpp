@@ -46,16 +46,16 @@ namespace raisin::sdl {
  * - allow-high-dpi
  * - shown
  */
-template<std::unsigned_integral flag_t,
+template<std::size_t max_flags = limits::max_flags,
          std::weakly_incrementable name_output>
 requires std::indirectly_writable<name_output, std::string>
 
-expected<flag_t, std::string>
+expected<std::uint32_t, std::string>
 load_window_flags(toml::table const & table,
                   std::string const & variable_path,
                   name_output into_invalid_names)
 {
-    static std::unordered_map<std::string, flag_t>
+    static std::unordered_map<std::string, std::uint32_t>
     const as_window_flag{
         { "fullscreen",         SDL_WINDOW_FULLSCREEN },
         { "fullscreen-desktop", SDL_WINDOW_FULLSCREEN_DESKTOP },
@@ -72,8 +72,8 @@ load_window_flags(toml::table const & table,
         { "shown",              SDL_WINDOW_SHOWN }
     };
 
-    return _flags_from_map(as_window_flag, table, variable_path,
-                           into_invalid_names);
+    return load_flags<max_flags>(table, variable_path,
+                                 as_window_flag, into_invalid_names);
 }
 
 /**
@@ -86,15 +86,15 @@ load_window_flags(toml::table const & table,
  * \return a function taking a table and returning an expected table result,
  *         such that the flags are written to output when loading succeeds.
  */
-template<std::unsigned_integral flag_t,
+template<std::size_t max_flags = limits::max_flags,
          std::weakly_incrementable name_output>
 requires std::indirectly_writable<name_output, std::string>
 
 auto load_window_flags_into(std::string const & variable_path,
-                            flag_t & flag_output,
+                            std::uint32_t & flag_output,
                             name_output into_invalid_names)
 {
-    return _load_flags(load_window_flags<flag_t, name_output>,
+    return _load_flags(load_window_flags<max_flags, name_output>,
                        variable_path, flag_output, into_invalid_names);
 }
 
@@ -122,7 +122,8 @@ auto load_window_flags_into(std::string const & variable_path,
  *  int y               OPTIONAL    defaults to SDL_WINDOWPOS_UNDEFINED
  *  array<string> flags OPTIONAL    the flags to use creating the window
  */
-template<std::weakly_incrementable name_output>
+template<std::size_t max_flags = limits::max_flags,
+         std::weakly_incrementable name_output>
 requires std::indirectly_writable<name_output, std::string>
 auto load_window(std::string const & variable_path,
                  SDL_Window * & window_output,
@@ -141,7 +142,7 @@ auto load_window(std::string const & variable_path,
             .and_then(load("title", title))
             .and_then(load("width", width))
             .and_then(load("height", height))
-            .and_then(load_window_flags_into(
+            .and_then(load_window_flags_into<max_flags>(
                 "flags", flags, into_invalid_names))
             .map(load_or_else("x", x, anywhere))
             .map(load_or_else("y", y, anywhere));

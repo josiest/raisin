@@ -40,16 +40,15 @@ namespace raisin::sdl {
  * \note Any names that aren't valid subsystems will not be included in the
  *       union, but will be written to invalid_names.
  */
-template<std::unsigned_integral flag_t,
+template<std::size_t max_flags = limits::max_flags,
          std::weakly_incrementable name_output>
 requires std::indirectly_writable<name_output, std::string>
 
-expected<flag_t, std::string>
+expected<std::uint32_t, std::string>
 load_subsystem_flags(toml::table const & table,
                      std::string const & variable_path,
                      name_output into_invalid_names)
 {
-
     static std::unordered_map<std::string, std::uint32_t>
     const as_subsystem_flag{
         { "timer",              SDL_INIT_TIMER },
@@ -62,8 +61,8 @@ load_subsystem_flags(toml::table const & table,
         { "everything",         SDL_INIT_EVERYTHING }
     };
 
-    return _flags_from_map(as_subsystem_flag, table, variable_path,
-                           into_invalid_names);
+    return load_flags<max_flags>(table, variable_path,
+                                 as_subsystem_flag, into_invalid_names);
 }
 
 /**
@@ -76,17 +75,16 @@ load_subsystem_flags(toml::table const & table,
  * \return a function taking a table and returning an expected table result,
  *         such that the flags are written to output when loading succeeds.
  */
-template<std::unsigned_integral flag_t,
+template<std::size_t max_flags = limits::max_flags,
          std::weakly_incrementable name_output>
 requires std::indirectly_writable<name_output, std::string>
 
 auto load_subsystem_flags_into(std::string const & variable_path,
-                               flag_t & flag_output,
+                               std::uint32_t & flag_output,
                                name_output into_invalid_names)
 {
-    return _load_flags(load_subsystem_flags<flag_t, name_output>,
-                       variable_path, flag_output,
-                       into_invalid_names);
+    return _load_flags(load_subsystem_flags<max_flags, name_output>,
+                       variable_path, flag_output, into_invalid_names);
 }
 
 /**
@@ -98,7 +96,8 @@ auto load_subsystem_flags_into(std::string const & variable_path,
  * \note Any names that aren't valid subsystems will be skipped over and written
  *       to invalid_names.
  */
-template<std::weakly_incrementable name_output>
+template<std::size_t max_flags = limits::max_flags,
+         std::weakly_incrementable name_output>
 requires std::indirectly_writable<name_output, std::string>
 auto init_sdl(std::string const & variable_path,
               name_output into_invalid_names)
@@ -109,7 +108,7 @@ auto init_sdl(std::string const & variable_path,
     {
         std::uint32_t flags;
         auto result = subtable(table, variable_path)
-            .and_then( load_subsystem_flags_into(
+            .and_then( load_subsystem_flags_into<max_flags>(
                 "subsystems", flags, into_invalid_names));
 
         if (not result) {

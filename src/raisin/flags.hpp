@@ -2,6 +2,7 @@
 
 // frameworks
 #include "raisin/future/expected.hpp"
+#include "raisin/lookup_table.hpp"
 
 // data types
 #include <string>
@@ -32,7 +33,9 @@ namespace raisin {
 using namespace std::string_literals;
 namespace fs = std::filesystem;
 
-std::size_t constexpr MAX_FLAGS = 32;
+namespace limits {
+std::size_t constexpr max_flags = 32;
+}
 
 std::string _strlower(std::string const & str)
 {
@@ -68,9 +71,8 @@ template<std::ranges::forward_range input,
          std::regular_invocable<std::string> projection>
 
 requires (std::permutable<std::ranges::iterator_t<input>> and
-          std::convertible_to<std::ranges::range_value_t<input>,
-                              std::string> and
-          std::integral<std::invoke_result_t<projection, std::string>>)
+          std::convertible_to<std::ranges::range_value_t<input>, std::string> and
+          std::unsigned_integral<std::invoke_result_t<projection, std::string>>)
 
 flag_result<std::invoke_result_t<projection, std::string>, input>
 parse_flags(input && flag_names, predicate is_flag, projection as_flag)
@@ -90,40 +92,56 @@ parse_flags(input && flag_names, predicate is_flag, projection as_flag)
     return { value, invalid_names };
 }
 
-template<std::unsigned_integral flag_t,
+template<typename table_t>
+concept flag_lookup = searchable<table_t> and
+                      pair_iterator<search_iterator_t<table_t>> and
+                      std::convertible_to<std::string, lookup_key_t<table_t>> and
+                      std::unsigned_integral<lookup_value_t<table_t>>;
+
+template<std::ranges::forward_range input, flag_lookup table_t>
+requires std::permutable<std::ranges::iterator_t<input>> and
+         std::convertible_to<std::ranges::range_value_t<input>,
+                             lookup_key_t<table_t>>
+
+flag_result<lookup_value_t<table_t>, input>
+parse_flags(input && flag_names, table_t const & flagmap)
+{
+    auto is_flag = [&flagmap](std::string const & name)
+    {
+        return flagmap.find(name) != flagmap.end();
+    };
+    auto as_flag = [&flagmap](std::string const & name)
+    {
+        return flagmap.find(name)->second;
+    };
+    return parse_flags(flag_names, is_flag, as_flag);
+}
+
+template<std::size_t max_flags = limits::max_flags,
+         flag_lookup lookup_t,
          std::weakly_incrementable name_output>
 requires std::indirectly_writable<name_output, std::string>
 
-expected<flag_t, std::string>
-_flags_from_map(std::unordered_map<std::string, flag_t> const & flagmap,
-                toml::table const & table,
-                std::string const & variable_path,
-                name_output into_invalid_names)
+expected<lookup_value_t<lookup_t>, std::string>
+load_flags(toml::table const & table,
+           std::string const & variable_path,
+           lookup_t const & flagmap,
+           name_output into_invalid_names)
 {
     namespace ranges = std::ranges;
 
-    // load the array of flag names
-    std::array<std::string, MAX_FLAGS> flag_names;
-    auto iter_result = load_array(table, variable_path, flag_names);
-    if (not iter_result) {
-        return unexpected(iter_result.error());
+    std::array<std::string, max_flags> flag_names;
+    auto end_names = load_array(table, variable_path, flag_names);
+    if (not end_names) {
+        return unexpected{ end_names.error() };
     }
 
-    auto is_flag = [&flagmap](auto const & name) {
-        return flagmap.contains(name);
-    };
-    auto as_flag = [&flagmap](auto const & name) {
-        return flagmap.at(name);
-    };
+    auto loaded_names = ranges::subrange{ ranges::begin(flag_names),
+                                          *end_names };
+    auto result = parse_flags(loaded_names, flagmap);
 
-    // parse the loaded names into flags
-    auto loaded_names = ranges::subrange(ranges::begin(flag_names),
-                                         *iter_result);
-    auto flag_result = parse_flags(loaded_names, is_flag, as_flag);
-
-    // write down any invalid names
-    ranges::copy(flag_result.invalid_names, into_invalid_names);
-    return flag_result.value;
+    ranges::copy(result.invalid_names, into_invalid_names);
+    return result.value;
 }
 
 template<std::unsigned_integral flag_t,
