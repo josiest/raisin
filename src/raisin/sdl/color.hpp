@@ -16,19 +16,19 @@
 
 inline namespace raisin {
 
-constexpr std::size_t
+inline constexpr std::size_t
 size(SDL_Color const & color)
 {
     return 4;
 }
 
-constexpr std::uint8_t *
+inline constexpr std::uint8_t *
 data(SDL_Color & color)
 {
     return &color.r;
 }
 
-constexpr std::uint8_t const *
+inline constexpr std::uint8_t const *
 data(SDL_Color const & color)
 {
     return &color.r;
@@ -59,7 +59,7 @@ end(SDL_Color const & color)
 }
 
 template<>
-expected<SDL_Color, std::string>
+inline expected<SDL_Color, std::string>
 load_value<SDL_Color>(toml::table const & table,
                       std::string const & variable_path)
 {
