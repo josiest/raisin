@@ -79,7 +79,7 @@ toml::node_type constexpr node_type_v = node_type<value_t>::value;
  *       descriptive fail conditions, and returns an expected result rather
  *       than toml::parse_result.
  */
-expected<toml::table, std::string>
+inline expected<toml::table, std::string>
 parse_file(std::string const & config_path)
 {
     if (not std::filesystem::exists(config_path)) {
@@ -97,7 +97,7 @@ parse_file(std::string const & config_path)
     return table_result.table();
 }
 
-expected<toml::table, std::string>
+inline expected<toml::table, std::string>
 validate_variable(toml::table const & table,
                   std::string const & variable_path)
 {
@@ -118,7 +118,7 @@ validate_variable(toml::table const & table,
  *
  * \return The subtable, or a descriptive message if failed
  */
-expected<toml::table, std::string>
+inline expected<toml::table, std::string>
 subtable(toml::table const & table, std::string const & variable_path)
 {
     // make sure the table has the subtable attribute name

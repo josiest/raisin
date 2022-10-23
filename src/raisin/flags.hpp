@@ -37,7 +37,7 @@ namespace limits {
 std::size_t constexpr max_flags = 32;
 }
 
-std::string _strlower(std::string const & str)
+inline std::string _strlower(std::string const & str)
 {
     auto tolower = [](unsigned char ch) { return std::tolower(ch); };
     std::string lower;
@@ -114,7 +114,7 @@ parse_flags(input && flag_names, table_t const & flagmap)
     {
         return flagmap.find(name)->second;
     };
-    return parse_flags(flag_names, is_flag, as_flag);
+    return parse_flags(std::forward<input>(flag_names), is_flag, as_flag);
 }
 
 template<std::size_t max_flags = limits::max_flags,
@@ -142,6 +142,27 @@ load_flags(toml::table const & table,
 
     ranges::copy(result.invalid_names, into_invalid_names);
     return result.value;
+}
+
+template<std::size_t max_flags = limits::max_flags,
+         flag_lookup lookup_t>
+
+expected<lookup_value_t<lookup_t>, std::string>
+load_flags(toml::table const & table,
+           std::string const & variable_path,
+           lookup_t const & flagmap)
+{
+    namespace ranges = std::ranges;
+
+    std::array<std::string, max_flags> flag_names;
+    auto end_names = load_array(table, variable_path, flag_names);
+    if (not end_names) {
+        return unexpected{ end_names.error() };
+    }
+
+    auto loaded_names = ranges::subrange{ ranges::begin(flag_names),
+                                          *end_names };
+    return parse_flags(loaded_names, flagmap).value;
 }
 
 template<std::unsigned_integral flag_t,
